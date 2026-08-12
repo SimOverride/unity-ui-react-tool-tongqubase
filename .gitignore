@@ -1,0 +1,30 @@
+# Unity 导入与生成目录
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+
+# Unity/IDE 生成文件
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.pdb
+*.mdb
+*.opendb
+.vs/
+.idea/
+.vscode/
+
+# React 依赖和构建产物
+ReactPreview/node_modules/
+ReactPreview/dist/
+ReactPreview/.vite/
+ReactPreview/*.tsbuildinfo
+
+# 本地验证输出
+UIReactAcceptanceResult.txt
