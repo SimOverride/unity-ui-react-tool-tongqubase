@@ -1,6 +1,6 @@
 # Unity UI React Tool
 
-这是面向 UnityBaseFramework 的 React UI 基础模板工具发布目录。
+这是面向 UnityBaseFramework 的 React UI 基础模板工具发布目录，位于 Unity 项目工作区 `UnityTools` 下，与 Unity 项目 `Tools` 同级。
 工具把静态 TSX 的层级、锚点、尺寸和基础控件属性转换为 Unity Prefab，并提供同源 React 浏览器预览。业务逻辑、正式美术资源和 UnityBaseFramework 本体不包含在本发布目录中。
 
 ## 目录

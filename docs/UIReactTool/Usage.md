@@ -101,11 +101,10 @@ npm run dev
 
 自动获取或自动生成：
 
-- 生成节点自身的 RectTransform 和内建 UI 组件。
 - 工具创建节点自身的 RectTransform 和内建 UI 组件。
 - 根节点的框架界面组件与绑定收集器。
 - `data-bind` 对应的绑定标记和绑定列表。
-- GameLauncher 验收时的 UIManager 中层节点。
+- React 预览的逻辑画布与竖屏分辨率适配。
 
 ## 常见问题
 

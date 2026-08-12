@@ -11,8 +11,8 @@ if ([string]::IsNullOrWhiteSpace($ReleaseRoot)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($TestRoot)) {
-    $parentRoot = Split-Path -Parent $ReleaseRoot
-    $TestRoot = Join-Path $parentRoot 'UnityTools'
+    # 发布目录与测试项目位于同一个 UnityTools 工作区，测试项目目录是发布目录的父目录。
+    $TestRoot = Split-Path -Parent $ReleaseRoot
 }
 
 $ReleaseRoot = [System.IO.Path]::GetFullPath($ReleaseRoot)
@@ -35,7 +35,8 @@ function Copy-DirectoryContent {
 function Copy-UnityTool {
     param(
         [Parameter(Mandatory = $true)][string]$Source,
-        [Parameter(Mandatory = $true)][string]$Destination
+        [Parameter(Mandatory = $true)][string]$Destination,
+        [Parameter(Mandatory = $true)][bool]$RemoveAcceptance
     )
 
     if (-not (Test-Path -LiteralPath $Source)) {
@@ -48,6 +49,18 @@ function Copy-UnityTool {
     New-Item -ItemType Directory -Path $destinationEditor -Force | Out-Null
 
     # 验收批处理只属于测试项目，发布副本不携带 GameMenu 和 GameLauncher 绑定。
+    if ($RemoveAcceptance) {
+        $destinationAcceptance = Join-Path $destinationEditor 'Acceptance'
+        if (Test-Path -LiteralPath $destinationAcceptance) {
+            Remove-Item -LiteralPath $destinationAcceptance -Recurse -Force
+        }
+
+        $destinationAcceptanceMeta = Join-Path $destinationEditor 'Acceptance.meta'
+        if (Test-Path -LiteralPath $destinationAcceptanceMeta) {
+            Remove-Item -LiteralPath $destinationAcceptanceMeta -Force
+        }
+    }
+
     Get-ChildItem -LiteralPath $sourceEditor -Force |
         Where-Object { $_.Name -ne 'Acceptance' -and $_.Name -ne 'Acceptance.meta' } |
         Copy-Item -Destination $destinationEditor -Recurse -Force
@@ -77,7 +90,7 @@ $testReactRoot = Join-Path $TestRoot 'UIReact'
 $releaseReactRoot = Join-Path $ReleaseRoot 'ReactPreview'
 
 if ($Direction -eq 'ToRelease') {
-    Copy-UnityTool -Source $testToolRoot -Destination $releaseToolRoot
+    Copy-UnityTool -Source $testToolRoot -Destination $releaseToolRoot -RemoveAcceptance $true
 
     foreach ($file in @('index.html', 'package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts')) {
         Copy-FileIfExists -Source (Join-Path $testReactRoot $file) -Destination (Join-Path $releaseReactRoot $file)
@@ -87,7 +100,7 @@ if ($Direction -eq 'ToRelease') {
     Copy-FileIfExists -Source (Join-Path $testReactRoot 'Acceptance\SampleDialog.tsx') -Destination (Join-Path $releaseReactRoot 'Generated\SampleDialog\SampleDialog.tsx')
 }
 else {
-    Copy-UnityTool -Source $releaseToolRoot -Destination $testToolRoot
+    Copy-UnityTool -Source $releaseToolRoot -Destination $testToolRoot -RemoveAcceptance $false
 
     foreach ($file in @('index.html', 'package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts')) {
         Copy-FileIfExists -Source (Join-Path $releaseReactRoot $file) -Destination (Join-Path $testReactRoot $file)
