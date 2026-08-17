@@ -6,6 +6,7 @@
 
 - 发布目录整理为 Unity Package Manager Git 包结构，根目录新增 `package.json`，工具源码位于 `Editor/`，编辑器测试位于 `Tests/Editor/`。
 - 发布包可通过 `https://github.com/SimOverride/unity-ui-react-tool-tongqubase.git` 添加到目标项目；测试项目副本仍由同步脚本维护在 `Tools/Assets/UIReactTool`。
+- 补齐发布包清单、README 和变更记录的 `.meta` 文件，避免 Unity 导入 UPM 包时重新生成资源 GUID。
 
 ## 2026-08-12
 
