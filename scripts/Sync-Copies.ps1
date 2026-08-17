@@ -46,28 +46,68 @@ function Copy-UnityTool {
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
     $sourceEditor = Join-Path $Source 'Editor'
     $destinationEditor = Join-Path $Destination 'Editor'
-    New-Item -ItemType Directory -Path $destinationEditor -Force | Out-Null
+    $sourceTests = Join-Path $Source 'Tests'
+    $destinationTests = Join-Path $Destination 'Tests'
 
-    # 验收批处理只属于测试项目，发布副本不携带 GameMenu 和 GameLauncher 绑定。
+    if (-not (Test-Path -LiteralPath $sourceEditor)) {
+        throw "工具源目录缺少 Editor：$sourceEditor"
+    }
+    if (-not (Test-Path -LiteralPath $sourceTests)) {
+        throw "工具源目录缺少 Tests：$sourceTests"
+    }
+
+    # 发布副本是 UPM 包根目录，清理旧版 Assets/UIReactTool 嵌套结构。
     if ($RemoveAcceptance) {
-        $destinationAcceptance = Join-Path $destinationEditor 'Acceptance'
-        if (Test-Path -LiteralPath $destinationAcceptance) {
-            Remove-Item -LiteralPath $destinationAcceptance -Recurse -Force
+        $legacyToolRoot = Join-Path $Destination 'Assets\UIReactTool'
+        $legacyToolMeta = Join-Path $Destination 'Assets\UIReactTool.meta'
+        $legacyAssetsRoot = Join-Path $Destination 'Assets'
+        if (Test-Path -LiteralPath $legacyToolRoot) {
+            Remove-Item -LiteralPath $legacyToolRoot -Recurse -Force
         }
-
-        $destinationAcceptanceMeta = Join-Path $destinationEditor 'Acceptance.meta'
-        if (Test-Path -LiteralPath $destinationAcceptanceMeta) {
-            Remove-Item -LiteralPath $destinationAcceptanceMeta -Force
+        if (Test-Path -LiteralPath $legacyToolMeta) {
+            Remove-Item -LiteralPath $legacyToolMeta -Force
+        }
+        if (Test-Path -LiteralPath $legacyAssetsRoot) {
+            $legacyAssets = @(Get-ChildItem -LiteralPath $legacyAssetsRoot -Force)
+            if ($legacyAssets.Count -eq 0) {
+                Remove-Item -LiteralPath $legacyAssetsRoot -Force
+            }
+        }
+        if (Test-Path -LiteralPath $destinationEditor) {
+            Remove-Item -LiteralPath $destinationEditor -Recurse -Force
+        }
+    }
+    else {
+        # 回灌测试项目时清理旧工具文件，但保留测试专用的 Acceptance 目录。
+        if (Test-Path -LiteralPath $destinationEditor) {
+            Get-ChildItem -LiteralPath $destinationEditor -Force |
+                Where-Object { $_.Name -ne 'Acceptance' -and $_.Name -ne 'Acceptance.meta' } |
+                Remove-Item -Recurse -Force
         }
     }
 
+    if (Test-Path -LiteralPath $destinationTests) {
+        Remove-Item -LiteralPath $destinationTests -Recurse -Force
+    }
+
+    New-Item -ItemType Directory -Path $destinationEditor -Force | Out-Null
+
+    # 验收批处理只属于测试项目，发布包不携带 GameMenu 和 GameLauncher 绑定。
     Get-ChildItem -LiteralPath $sourceEditor -Force |
         Where-Object { $_.Name -ne 'Acceptance' -and $_.Name -ne 'Acceptance.meta' } |
         Copy-Item -Destination $destinationEditor -Recurse -Force
 
-    Get-ChildItem -LiteralPath $Source -Force |
-        Where-Object { $_.Name -ne 'Editor' } |
-        Copy-Item -Destination $Destination -Recurse -Force
+    Copy-Item -LiteralPath $sourceTests -Destination $Destination -Recurse -Force
+
+    $editorMeta = Join-Path $Source 'Editor.meta'
+    if (Test-Path -LiteralPath $editorMeta) {
+        Copy-Item -LiteralPath $editorMeta -Destination $Destination -Force
+    }
+
+    $testsMeta = Join-Path $Source 'Tests.meta'
+    if (Test-Path -LiteralPath $testsMeta) {
+        Copy-Item -LiteralPath $testsMeta -Destination $Destination -Force
+    }
 }
 
 function Copy-FileIfExists {
@@ -85,7 +125,7 @@ function Copy-FileIfExists {
 }
 
 $testToolRoot = Join-Path $TestRoot 'Tools\Assets\UIReactTool'
-$releaseToolRoot = Join-Path $ReleaseRoot 'Assets\UIReactTool'
+$releaseToolRoot = $ReleaseRoot
 $testReactRoot = Join-Path $TestRoot 'UIReact'
 $releaseReactRoot = Join-Path $ReleaseRoot 'ReactPreview'
 

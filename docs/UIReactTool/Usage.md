@@ -8,6 +8,23 @@
 
 窗口内所有说明和操作按钮均为中文。
 
+## 通过 Git URL 安装
+
+发布包根目录包含 `package.json`，可直接作为 Unity Package Manager Git 包使用：
+
+1. 打开目标 Unity 项目的 Package Manager。
+2. 点击左上角 `+`，选择 `Add package from git URL...`。
+3. 输入 `https://github.com/SimOverride/unity-ui-react-tool-tongqubase.git` 并等待导入完成。
+4. 确认菜单 `Tools/UI/从 React 生成 Prefab...` 出现，再按本说明配置路径和资源。
+
+也可以在目标项目 `Packages/manifest.json` 的 `dependencies` 中加入：
+
+```json
+"com.simoverride.unity-ui-react-tool": "https://github.com/SimOverride/unity-ui-react-tool-tongqubase.git"
+```
+
+需要固定分支或标签时，在 URL 末尾追加 `#分支名` 或 `#标签名`。目标项目必须已经提供 UnityBaseFramework、其编辑器程序集和 TextMeshPro；发布包不会复制或修改这些依赖。
+
 ## 路径配置
 
 默认配置：

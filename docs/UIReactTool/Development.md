@@ -2,7 +2,9 @@
 
 ## 项目结构
 
-- Unity 工具程序集：`Assets/UIReactTool/Editor`。
+- Unity 工具程序集：发布包根目录 `Editor/`；测试项目同步副本为 `Tools/Assets/UIReactTool/Editor`。
+- 编辑器测试程序集：发布包根目录 `Tests/Editor/`；测试项目同步副本为 `Tools/Assets/UIReactTool/Tests/Editor/`。
+- 包清单：发布包根目录 `package.json`，包名为 `com.simoverride.unity-ui-react-tool`，用于 Unity Package Manager Git URL 安装。
 - 解析逻辑：读取静态 TSX 标签、属性、文本和父子层级。
 - 生成逻辑：创建 RectTransform、uGUI/TMP 控件、布局组、绑定标记和 Prefab。
 - React 预览工程模板：`ReactPreview`，安装到目标项目后通常命名为同级的 `UIReact`。
@@ -14,7 +16,7 @@
 
 目标项目必须自行提供与工具程序集匹配的 UnityBaseFramework、UniTask、DOTween、YooAsset、Newtonsoft Json 和 TextMeshPro 依赖。
 
-发布目录不包含框架源码或快照。工具本体通过公开框架类型接入，不包含对框架源文件的补丁。
+发布目录不包含框架源码或快照。工具本体通过公开框架类型接入，不包含对框架源文件的补丁。通过 Git URL 安装时，目标项目仍需自行提供 `TongquBase`、`TongquBase.Editor` 等框架程序集。
 
 ## 生成流程
 
