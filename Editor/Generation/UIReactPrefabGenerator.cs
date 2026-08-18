@@ -34,8 +34,6 @@ namespace UIReactTool.Generation
 
                 RectTransform rootRect = root.GetComponent<RectTransform>();
                 NormalizeRootRect(rootRect, document.Root, settings);
-                if (!document.Root.HasAttribute("data-pos"))
-                    rootRect.anchoredPosition3D = Vector3.zero;
 
                 UIView existingView = root.GetComponent<UIView>();
                 if (existingView != null && existingView.GetType() != viewType)
@@ -171,6 +169,9 @@ namespace UIReactTool.Generation
                 rootRect.offsetMax = Vector2.zero;
                 rootRect.sizeDelta = Vector2.zero;
                 rootRect.pivot = new Vector2(0.5f, 0.5f);
+                rootRect.anchoredPosition3D = Vector3.zero;
+                rootRect.localRotation = Quaternion.identity;
+                rootRect.localScale = Vector3.one;
                 return;
             }
 
@@ -180,9 +181,15 @@ namespace UIReactTool.Generation
                 declaredSize.x > 0f && declaredSize.y > 0f)
                 referenceResolution = declaredSize;
 
+            rootRect.pivot = new Vector2(0.5f, 0.5f);
             rootRect.anchorMin = rootRect.pivot;
             rootRect.anchorMax = rootRect.pivot;
+            rootRect.offsetMin = Vector2.zero;
+            rootRect.offsetMax = Vector2.zero;
+            rootRect.anchoredPosition3D = Vector3.zero;
             rootRect.sizeDelta = referenceResolution;
+            rootRect.localRotation = Quaternion.identity;
+            rootRect.localScale = Vector3.one;
         }
 
         private static void EnsureAssetFolder(string assetFolder)

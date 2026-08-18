@@ -1,11 +1,30 @@
 import { createReadStream, existsSync, readFileSync, readdirSync } from 'node:fs'
 import { extname, relative, resolve, sep } from 'node:path'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const unityProjectRoot = resolve(process.env.UNITY_PROJECT_PATH ?? resolve(__dirname, '../Tools'))
-const unityAssetsRoot = resolve(unityProjectRoot, 'Assets')
 const generatedRoot = resolve(__dirname, 'Generated')
+
+// 资源目录必须由目标 Unity 项目显式提供，不能使用模板仓库的回退路径。
+function resolveUnityProjectRoot(mode: string): string {
+  const fileEnv = loadEnv(mode, process.cwd(), '')
+  const configuredPath = process.env.UNITY_PROJECT_PATH?.trim() || fileEnv.UNITY_PROJECT_PATH?.trim()
+  if (!configuredPath) {
+    throw new Error(
+      '[UI React] 未配置 UNITY_PROJECT_PATH。请先使用 Unity 菜单“初始化 ReactPreview 模板”，或在目标 React 工程的 .env.local 中设置当前 Unity 项目根目录。',
+    )
+  }
+
+  const unityProjectRoot = resolve(configuredPath)
+  const unityAssetsRoot = resolve(unityProjectRoot, 'Assets')
+  if (!existsSync(unityProjectRoot) || !existsSync(unityAssetsRoot)) {
+    throw new Error(
+      `[UI React] UNITY_PROJECT_PATH 无效：${unityProjectRoot}。该目录必须是当前 Unity 项目根目录，并且包含 Assets。`,
+    )
+  }
+
+  return unityProjectRoot
+}
 
 function collectTsxFiles(directory: string): string[] {
   if (!existsSync(directory)) return []
@@ -36,7 +55,7 @@ function contentType(path: string): string {
   }
 }
 
-function unityAssetsPlugin(): Plugin {
+function unityAssetsPlugin(unityAssetsRoot: string): Plugin {
   let isBuild = false
   return {
     name: 'unity-assets',
@@ -70,6 +89,9 @@ function unityAssetsPlugin(): Plugin {
   }
 }
 
-export default defineConfig({
-  plugins: [react(), unityAssetsPlugin()],
+export default defineConfig(({ mode }) => {
+  const unityProjectRoot = resolveUnityProjectRoot(mode)
+  return {
+    plugins: [react(), unityAssetsPlugin(resolve(unityProjectRoot, 'Assets'))],
+  }
 })

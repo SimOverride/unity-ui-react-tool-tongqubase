@@ -43,6 +43,7 @@ namespace UIReactTool.Generation
 
             ApplyRectTransform(child.gameObject, node);
             ApplyCommonState(child.gameObject, node);
+            ApplyLayout(child.gameObject, node);
         }
 
         public static Transform ResolveChildParent(GameObject componentRoot)
@@ -436,6 +437,13 @@ namespace UIReactTool.Generation
             GameObject layoutTarget = scrollRect != null && scrollRect.content != null
                 ? scrollRect.content.gameObject
                 : gameObject;
+
+            if (string.Equals(layoutType, "Grid", StringComparison.OrdinalIgnoreCase))
+            {
+                ApplyGridLayout(layoutTarget, node);
+                return;
+            }
+
             HorizontalOrVerticalLayoutGroup layout = null;
             if (string.Equals(layoutType, "Horizontal", StringComparison.OrdinalIgnoreCase))
                 layout = layoutTarget.GetComponent<HorizontalLayoutGroup>() ?? layoutTarget.AddComponent<HorizontalLayoutGroup>();
@@ -459,6 +467,35 @@ namespace UIReactTool.Generation
                 layout.childForceExpandWidth = expandWidth;
             if (UIReactValueParser.TryBool(node.GetAttribute("data-layout-child-force-expand-height"), out bool expandHeight))
                 layout.childForceExpandHeight = expandHeight;
+        }
+
+        private static void ApplyGridLayout(GameObject layoutTarget, UIReactNode node)
+        {
+            GridLayoutGroup grid = layoutTarget.GetComponent<GridLayoutGroup>() ?? layoutTarget.AddComponent<GridLayoutGroup>();
+
+            if (UIReactValueParser.TryVector2(node.GetAttribute("data-layout-cell-size"), out Vector2 cellSize))
+                grid.cellSize = cellSize;
+            if (UIReactValueParser.TryVector2(node.GetAttribute("data-layout-spacing"), out Vector2 spacing))
+                grid.spacing = spacing;
+            else
+            {
+                if (UIReactValueParser.TryFloat(node.GetAttribute("data-column-space"), out float columnSpace))
+                    grid.spacing = new Vector2(columnSpace, grid.spacing.y);
+                if (UIReactValueParser.TryFloat(node.GetAttribute("data-row-space"), out float rowSpace))
+                    grid.spacing = new Vector2(grid.spacing.x, rowSpace);
+            }
+            if (UIReactValueParser.TryVector4(node.GetAttribute("data-layout-padding"), out Vector4 padding))
+                grid.padding = new RectOffset(Mathf.RoundToInt(padding.x), Mathf.RoundToInt(padding.y), Mathf.RoundToInt(padding.z), Mathf.RoundToInt(padding.w));
+            if (Enum.TryParse(node.GetAttribute("data-layout-child-alignment"), true, out TextAnchor alignment))
+                grid.childAlignment = alignment;
+            if (Enum.TryParse(node.GetAttribute("data-layout-constraint"), true, out GridLayoutGroup.Constraint constraint))
+                grid.constraint = constraint;
+            if (UIReactValueParser.TryInt(node.GetAttribute("data-layout-constraint-count"), out int count))
+                grid.constraintCount = Mathf.Max(1, count);
+            if (Enum.TryParse(node.GetAttribute("data-layout-start-corner"), true, out GridLayoutGroup.Corner corner))
+                grid.startCorner = corner;
+            if (Enum.TryParse(node.GetAttribute("data-layout-start-axis"), true, out GridLayoutGroup.Axis axis))
+                grid.startAxis = axis;
         }
 
         private static void ApplyScroll(GameObject gameObject, UIReactNode node)

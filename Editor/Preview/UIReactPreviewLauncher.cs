@@ -74,8 +74,7 @@ namespace UIReactTool.Preview
 
         private static void ValidateProject(string reactRootPath)
         {
-            if (string.IsNullOrWhiteSpace(reactRootPath) || !File.Exists(Path.Combine(reactRootPath, "package.json")))
-                throw new FileNotFoundException("React 预览目录中不存在 package.json，请检查“React 工程目录”配置。", reactRootPath);
+            UIReactPreviewTemplate.Validate(reactRootPath);
         }
     }
 }

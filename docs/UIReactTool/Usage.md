@@ -15,7 +15,7 @@
 1. 打开目标 Unity 项目的 Package Manager。
 2. 点击左上角 `+`，选择 `Add package from git URL...`。
 3. 输入 `https://github.com/SimOverride/unity-ui-react-tool-tongqubase.git` 并等待导入完成。
-4. 确认菜单 `Tools/UI/从 React 生成 Prefab...` 出现，再按本说明配置路径和资源。
+4. 确认菜单 `Tools/UI/从 React 生成 Prefab...` 和 `Tools/UI/初始化 ReactPreview 模板` 出现，再按本说明配置路径和资源。
 
 也可以在目标项目 `Packages/manifest.json` 的 `dependencies` 中加入：
 
@@ -24,6 +24,14 @@
 ```
 
 需要固定分支或标签时，在 URL 末尾追加 `#分支名` 或 `#标签名`。目标项目必须已经提供 UnityBaseFramework、其编辑器程序集和 TextMeshPro；发布包不会复制或修改这些依赖。
+
+## 初始化 ReactPreview
+
+不要直接复制发布目录中的 `ReactPreview`。在工具窗口将 React 工程目录设为 Unity 项目目录之外的目标路径后，点击“按工具白名单初始化 ReactPreview 模板”，或使用菜单 `Tools/UI/初始化 ReactPreview 模板`。
+
+初始化只会复制 `index.html`、构建配置、`src` 和 `Generated/SampleDialog/SampleDialog.tsx`，并跳过 `node_modules`、`dist`、`.vite`、`.tsbuildinfo`、`.meta` 和测试项目业务页面；完成后会写入 `.uirect-template.json` 初始化标记，并生成指向当前 Unity 项目根目录的 `.env.local`。目标目录已有内容时会先确认；已有 `Generated` 业务页面不会被删除。安装依赖、启动预览和生成 Prefab 都会校验该标记，手工复制整个 `ReactPreview` 的目录不会通过校验。
+
+导入新 Unity 项目时不得沿用模板中的 `Tools/` 路径。若手动运行 npm，先检查 `.env.local` 的 `UNITY_PROJECT_PATH` 是否指向当前项目根目录（该目录必须包含 `Assets`）；缺失或无效时 Vite 会直接报错，避免预览显示错误项目的资源。
 
 ## 路径配置
 
@@ -56,7 +64,9 @@
 
 Unity 使用的属性必须是字符串字面量。组件函数可以包含 Hooks、事件和预览状态，但花括号表达式、条件节点、模板字符串及 `.map()` 结果不会进入 Unity 基础模板；需要生成的层级必须静态写在根面板下。
 
-列表和网格的静态子节点会自动挂入组件的滚动 Content。组件 Prefab 必须正确配置 ScrollRect 的 Content 引用。普通列表保留条目锚点；需要自动纵向排列时使用简单列表或显式声明纵向布局。需要设置 Content 尺寸、轴心或锚点时，使用 `data-prefab-child-path="Viewport/Content"` 描述该已有子节点。
+列表和网格的静态子节点会自动挂入组件的滚动 Content。组件 Prefab 必须正确配置 ScrollRect 的 Content 引用。普通列表保留条目锚点；需要自动纵向排列时使用简单列表或显式声明纵向布局。需要设置 Content 尺寸、轴心或锚点时，使用 `data-prefab-child-path="Viewport/Content"` 描述该已有子节点；Prefab 子节点也可以声明 `data-layout-group="Vertical"` 或 `data-layout-group="Grid"`。
+
+Grid 布局可使用 `data-layout-cell-size="(128, 65)"`、`data-layout-spacing="(15, 21)"`、`data-layout-padding="(0, 0, 0, 0)"`、`data-layout-constraint="FixedColumnCount"` 和 `data-layout-constraint-count="5"`。布局组只排列其直接子节点，标题、分页按钮等非条目节点应放在布局组外。
 
 图片节点使用 `data-sprite="Assets/Arts/.../image.png"`。路径必须位于当前 Unity 项目的 `Assets` 下，素材导入类型必须为 Sprite。需要保持原始宽高比时添加 `data-preserve-aspect="true"`。
 
@@ -89,7 +99,7 @@ npm install
 npm run dev
 ```
 
-预览页面会自动发现 `Generated` 下的 TSX，并允许在顶部下拉框切换界面。分辨率下拉框提供多个竖屏设备尺寸；响应式根节点会随逻辑画布宽度变化，布局以 750×1680 为设计基准，按照 UIManager 的高度匹配方式计算逻辑宽度。
+预览页面会自动发现 `Generated` 下的 TSX，并允许在顶部下拉框切换界面。分辨率下拉框提供多个竖屏设备尺寸；响应式根节点会随逻辑画布宽度变化，布局以 750×1680 为设计基准，按照 UIManager 的高度匹配方式（`MatchWidthOrHeight=1`）计算逻辑宽度。工具默认使用响应式根节点；固定参考界面必须在工具配置或根节点中显式选择 FixedReference。
 
 发布模板默认包含 `SampleDialog` 静态示例；业务项目可以在 `Generated` 下添加自己的 TSX 界面。
 
@@ -102,7 +112,8 @@ npm run dev
 1. 在目标项目打开包含 UIManager 的启动场景。
 2. 进入播放模式，确认生成的 Prefab 能由 UIManager 正常加载。
 3. 检查根节点为框架界面类型，并确认绑定节点、锚点和分辨率变化符合 TSX 声明。
-4. 在 React 预览中切换多个竖屏分辨率，确认布局没有依赖浏览器 CSS 的额外修正。
+4. 在 React 预览中切换 750×1680、720×1600、828×1792 和 390×844，确认逻辑高度保持 1680、逻辑宽度按屏幕比例变化，且布局没有依赖浏览器 CSS 的额外修正。
+5. 运行时确认响应式页面根节点与 `Layer_50` 的 `RectTransform.rect` 尺寸一致；窄屏重点检查顶部/底部边距、中心控件、底栏和 Grid/列表条目。
 
 ## 引用配置说明
 

@@ -8,7 +8,7 @@
 - `package.json`：Unity Package Manager 包清单，位于 Git 包根目录。
 - `Editor`：编辑器工具源码和程序集定义。
 - `Tests/Editor`：编辑器测试程序集。
-- `ReactPreview`：可复制到 Unity 项目同级并改名为 `UIReact` 的 React/Vite 预览模板。
+- `ReactPreview`：由 Unity 工具按白名单初始化到 Unity 项目同级的 React/Vite 预览模板；禁止把整个发布目录直接复制到目标项目。
 - `docs/UIReactTool`：设计、开发和使用说明。
 - `scripts/Sync-Copies.ps1`：测试项目副本与发布副本的双向同步脚本。
 
@@ -23,7 +23,7 @@
    ```
 
 4. 等待包导入和 Unity 编译完成；菜单 `Tools/UI/从 React 生成 Prefab...` 出现后即表示工具已加载。
-5. 将 `ReactPreview` 复制到 Unity 项目同级，通常命名为 `UIReact`；也可以在工具窗口中配置其他绝对路径。
+5. 在工具窗口中将“React 工程目录”设为 Unity 项目同级的 `UIReact`（也可以选择 Unity 项目目录之外的其他绝对路径），点击“按工具白名单初始化 ReactPreview 模板”；工具只复制构建配置、`src` 和示例 TSX，不复制 `node_modules`、`dist`、缓存或测试业务页面，并写入初始化标记和当前项目的 `.env.local`。
 6. 在工具窗口配置 TSX、Prefab 输出目录、脚本目录、组件 Prefab 目录和默认 TMP 字体，然后生成 Prefab。
 
 也可以在 `Packages/manifest.json` 中手动加入 Git 依赖：
@@ -38,14 +38,16 @@
 
 ## 预览模板
 
-在 `ReactPreview` 目录执行：
+使用工具初始化后的目标 `UIReact` 目录执行：
 
 ```powershell
 npm install
 npm run dev
 ```
 
-Unity 工具启动预览时会自动传入 `UNITY_PROJECT_PATH`，使 `data-sprite="Assets/..."` 能读取当前 Unity 项目的资源。手动启动时可以设置该环境变量指向目标 Unity 项目目录。
+不要通过文件管理器直接复制整个 `ReactPreview` 目录。需要重新创建或更新模板时，使用 Unity 菜单 `Tools/UI/初始化 ReactPreview 模板`；已有 `Generated` 业务页面不会被删除，但模板文件和 `src` 会被更新。Prefab 生成、预览启动和依赖安装都会校验初始化标记，手工复制的目录会被拒绝。
+
+Unity 工具启动预览时会自动传入 `UNITY_PROJECT_PATH`，使 `data-sprite="Assets/..."` 能读取当前 Unity 项目的资源。初始化器同时把当前项目根目录写入目标工程 `.env.local`，所以手动执行 `npm run dev` 或 `npm run build` 也能使用同一资源目录。没有该配置时工具会直接报错，不再静默回退到发布仓库的 `Tools/`。
 
 ## 双副本维护
 

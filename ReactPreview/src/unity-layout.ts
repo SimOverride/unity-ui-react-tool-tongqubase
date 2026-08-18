@@ -21,7 +21,7 @@ function directGeneratedChildren(parent: HTMLElement): HTMLElement[] {
   return Array.from(parent.querySelectorAll<HTMLElement>('[data-component]')).filter((child) => {
     let current = child.parentElement
     while (current && current !== parent) {
-      if (current.dataset.component) return false
+      if (current.dataset.component || current.dataset.prefabChildPath) return false
       current = current.parentElement
     }
     return current === parent
@@ -30,13 +30,19 @@ function directGeneratedChildren(parent: HTMLElement): HTMLElement[] {
 
 function applyLayoutGroup(parent: HTMLElement): void {
   const type = parent.dataset.layoutGroup
-  if (type !== 'Horizontal' && type !== 'Vertical') return
+  if (type !== 'Horizontal' && type !== 'Vertical' && type !== 'Grid') return
 
   const children = directGeneratedChildren(parent)
-  const spacing = Number(parent.dataset.layoutSpacing ?? 0)
   const [left, right, top, bottom] = numbers(parent.dataset.layoutPadding, 4, [0, 0, 0, 0])
   const parentWidth = Number(parent.dataset.previewWidth ?? 0)
   const parentHeight = Number(parent.dataset.previewHeight ?? 0)
+
+  if (type === 'Grid') {
+    applyGridLayout(parent, children, parentWidth, parentHeight, left, right, top, bottom)
+    return
+  }
+
+  const spacing = Number(parent.dataset.layoutSpacing ?? 0)
   let cursor = type === 'Horizontal' ? left : top
 
   children.forEach((child) => {
@@ -51,6 +57,72 @@ function applyLayoutGroup(parent: HTMLElement): void {
       child.style.top = `${cursor}px`
       cursor += height + spacing
     }
+  })
+}
+
+function applyGridLayout(
+  parent: HTMLElement,
+  children: HTMLElement[],
+  parentWidth: number,
+  parentHeight: number,
+  left: number,
+  right: number,
+  top: number,
+  bottom: number,
+): void {
+  const [cellWidth, cellHeight] = numbers(parent.dataset.layoutCellSize, 2, [0, 0])
+  if (!(cellWidth > 0) || !(cellHeight > 0)) return
+
+  const [columnSpacing, rowSpacing] = numbers(parent.dataset.layoutSpacing, 2, [0, 0])
+  const constraint = parent.dataset.layoutConstraint ?? 'Flexible'
+  const configuredCount = Math.max(1, Math.floor(Number(parent.dataset.layoutConstraintCount ?? 1)))
+  const availableWidth = Math.max(0, parentWidth - left - right)
+  const availableHeight = Math.max(0, parentHeight - top - bottom)
+  let columnCount: number
+  let rowCount: number
+
+  if (constraint === 'FixedRowCount') {
+    rowCount = configuredCount
+    columnCount = Math.max(1, Math.ceil(children.length / rowCount))
+  } else if (constraint === 'FixedColumnCount') {
+    columnCount = configuredCount
+    rowCount = Math.max(1, Math.ceil(children.length / columnCount))
+  } else if (parent.dataset.layoutStartAxis === 'Vertical') {
+    rowCount = Math.max(1, Math.floor((availableHeight + rowSpacing) / (cellHeight + rowSpacing)))
+    columnCount = Math.max(1, Math.ceil(children.length / rowCount))
+  } else {
+    columnCount = Math.max(1, Math.floor((availableWidth + columnSpacing) / (cellWidth + columnSpacing)))
+    rowCount = Math.max(1, Math.ceil(children.length / columnCount))
+  }
+
+  const contentWidth = columnCount * cellWidth + Math.max(0, columnCount - 1) * columnSpacing
+  const contentHeight = rowCount * cellHeight + Math.max(0, rowCount - 1) * rowSpacing
+  const alignment = parent.dataset.layoutChildAlignment ?? 'UpperLeft'
+  const horizontalAlignment = alignment.endsWith('Right') ? 'Right' : alignment.endsWith('Center') ? 'Center' : 'Left'
+  const verticalAlignment = alignment.startsWith('Lower') ? 'Lower' : alignment.startsWith('Middle') ? 'Middle' : 'Upper'
+  const startOffsetX = horizontalAlignment === 'Right'
+    ? Math.max(0, availableWidth - contentWidth)
+    : horizontalAlignment === 'Center'
+      ? Math.max(0, availableWidth - contentWidth) / 2
+      : 0
+  const startOffsetY = verticalAlignment === 'Lower'
+    ? Math.max(0, availableHeight - contentHeight)
+    : verticalAlignment === 'Middle'
+      ? Math.max(0, availableHeight - contentHeight) / 2
+      : 0
+  const startCorner = parent.dataset.layoutStartCorner ?? 'UpperLeft'
+  const startAxis = parent.dataset.layoutStartAxis ?? 'Horizontal'
+
+  children.forEach((child, index) => {
+    const logicalRow = startAxis === 'Vertical' ? index % rowCount : Math.floor(index / columnCount)
+    const logicalColumn = startAxis === 'Vertical' ? Math.floor(index / rowCount) : index % columnCount
+    const column = startCorner.endsWith('Right') ? columnCount - logicalColumn - 1 : logicalColumn
+    const rowFromTop = startCorner.startsWith('Lower') ? rowCount - logicalRow - 1 : logicalRow
+
+    child.style.left = `${left + startOffsetX + column * (cellWidth + columnSpacing)}px`
+    child.style.top = `${top + startOffsetY + rowFromTop * (cellHeight + rowSpacing)}px`
+    child.style.width = `${cellWidth}px`
+    child.style.height = `${cellHeight}px`
   })
 }
 
@@ -97,7 +169,7 @@ function applyVisualAttributes(element: HTMLElement): void {
 }
 
 export function applyUnityLayout(container: HTMLElement, options: UnityLayoutOptions): void {
-  const elements = Array.from(container.querySelectorAll<HTMLElement>('[data-component]'))
+  const elements = Array.from(container.querySelectorAll<HTMLElement>('[data-component], [data-prefab-child-path]'))
   const root = elements[0]
   const isFixedReferenceRoot = root?.dataset.layoutMode?.toLowerCase() === 'fixedreference'
   const declaredRootSize = root ? numbers(root.dataset.size, 2, []) : []
@@ -113,7 +185,7 @@ export function applyUnityLayout(container: HTMLElement, options: UnityLayoutOpt
     const isRoot = element === root
     const parent = isRoot
       ? null
-      : element.parentElement?.closest<HTMLElement>('[data-component]') ?? null
+      : element.parentElement?.closest<HTMLElement>('[data-component], [data-prefab-child-path]') ?? null
     const parentWidth = parent ? Number(parent.dataset.previewWidth ?? options.canvasWidth) : options.canvasWidth
     const parentHeight = parent ? Number(parent.dataset.previewHeight ?? options.canvasHeight) : options.canvasHeight
     const anchors = numbers(element.dataset.anchors, 4, [0.5, 0.5, 0.5, 0.5]) as RectAnchors

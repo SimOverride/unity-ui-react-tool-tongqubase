@@ -22,6 +22,13 @@ namespace UIReactTool
             GetWindow<UIReactToolWindow>("React UI 生成器");
         }
 
+        [MenuItem("Tools/UI/初始化 ReactPreview 模板", false, 101)]
+        public static void InitializePreviewTemplateMenu()
+        {
+            UIReactToolSettings settings = UIReactToolSettings.instance;
+            Execute(() => InitializePreviewTemplate(settings));
+        }
+
         private void OnEnable()
         {
             UIReactToolSettings settings = UIReactToolSettings.instance;
@@ -57,6 +64,9 @@ namespace UIReactTool
             if (EditorGUI.EndChangeCheck())
                 settings.SaveSettings();
 
+            if (GUILayout.Button("按工具白名单初始化 ReactPreview 模板", GUILayout.Height(24f)))
+                Execute(() => InitializePreviewTemplate(settings));
+
             EditorGUILayout.Space(10f);
             EditorGUILayout.LabelField("生成", EditorStyles.boldLabel);
             EditorGUILayout.BeginHorizontal();
@@ -87,6 +97,7 @@ namespace UIReactTool
             EditorGUILayout.Space(10f);
             EditorGUILayout.HelpBox(
                 "默认自动获取：生成节点自身的 RectTransform 和组件。\n" +
+                "ReactPreview 应使用上方初始化按钮创建；工具只复制 package.json、src 和示例 TSX，不复制 node_modules、dist、缓存或测试业务页面，并写入初始化标记和当前项目 .env.local。\n" +
                 "手动配置：React 工程目录、Prefab 输出目录、UIView 脚本目录、组件 Prefab 目录、默认 TMP 字体、参考分辨率和根布局模式。\n" +
                 "自定义组件必须在组件目录中提供与 data-component 同名的 Prefab。",
                 MessageType.None);
@@ -117,6 +128,25 @@ namespace UIReactTool
                 ? Directory.GetFiles(generatedRoot, "*.tsx", SearchOption.AllDirectories)
                 : Array.Empty<string>();
             return files.Length > 0 ? files[0] : string.Empty;
+        }
+
+        private static void InitializePreviewTemplate(UIReactToolSettings settings)
+        {
+            string targetPath = settings.ReactRootPath;
+            if (Directory.Exists(targetPath) && Directory.GetFileSystemEntries(targetPath).Length > 0)
+            {
+                bool confirmed = EditorUtility.DisplayDialog(
+                    "初始化 ReactPreview 模板",
+                    "目标目录已有内容。工具只会覆盖模板文件，不会删除 Generated 下的业务页面，但会更新 src、构建配置并写入初始化标记和当前项目 .env.local。是否继续？",
+                    "继续",
+                    "取消");
+                if (!confirmed)
+                    return;
+            }
+
+            UIReactPreviewTemplate.Initialize(targetPath);
+            settings.ReactRootPath = targetPath;
+            settings.SaveSettings();
         }
 
         private static void Execute(Action action)

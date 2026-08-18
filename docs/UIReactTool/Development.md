@@ -8,6 +8,7 @@
 - 解析逻辑：读取静态 TSX 标签、属性、文本和父子层级。
 - 生成逻辑：创建 RectTransform、uGUI/TMP 控件、布局组、绑定标记和 Prefab。
 - React 预览工程模板：`ReactPreview`，安装到目标项目后通常命名为同级的 `UIReact`。
+- ReactPreview 由编辑器初始化器按固定白名单复制 `index.html`、构建配置、`src` 和 SampleDialog；复制时跳过 `.meta`、`node_modules`、`dist`、`.vite` 和 `tsbuildinfo`，并在目标目录写入 `.uirect-template.json` 标记和当前项目的 `.env.local`。Prefab 生成、预览启动与依赖安装必须通过标记校验。
 - 当前预览样例：`ReactPreview/Generated/SampleDialog/SampleDialog.tsx`。
 - Unity 验收场景、业务脚本和 Prefab 不属于发布工具目录，由目标项目维护。
 - 默认 Prefab 输出：目标 Unity 项目的 `Assets/Prefabs/UI`。
@@ -21,16 +22,17 @@
 ## 生成流程
 
 1. 编辑器窗口读取项目配置与 TSX 文件。
-2. 解析器先定位静态根面板，再提取其静态标签、静态字符串属性和可见文本；组件函数外围代码及花括号表达式被跳过。
-3. 根标签提供界面类型名；若类型不存在，先生成继承框架界面基类的 partial 脚本。
-4. Unity 完成脚本编译和域重载后，挂起任务自动恢复。
-5. 生成器按组件名查找可配置组件目录中的同名 Prefab。
-6. 未找到 Prefab 时，基础组件由内建 uGUI/TMP 工厂创建；未知组件抛出错误。
-7. 生成器按根布局模式规范化根节点：响应式模式使用全屏锚点和零偏移，固定参考模式使用 TSX 有效尺寸或工具配置参考分辨率；随后应用内部 RectTransform、图片 Sprite、文本字号与描边、颜色、交互状态、滑块、切换、滚动和布局组属性。
-8. 带 ScrollRect 的内建或自定义组件使用其实际 Content 作为声明子节点挂载点；普通列表保留条目声明的锚点，简单列表和网格才提供默认布局组。
-9. 生成器把配置的默认 TMP 字体应用到本次生成组件及组件 Prefab 内的 TMP 文本。
-10. `data-bind` 转换为框架绑定标记，根对象添加绑定收集器并重建绑定列表。
-11. Prefab 以界面类型名保存到配置目录。
+2. ReactPreview 初始化入口从 UPM 包路径或工作区发布目录定位模板，并只复制允许的模板文件；初始化完成后写入 `.uirect-template.json` 标记，预览启动和 Prefab 生成前检查标记、构建配置和 `src/main.tsx`。
+3. 解析器先定位静态根面板，再提取其静态标签、静态字符串属性和可见文本；组件函数外围代码及花括号表达式被跳过。
+4. 根标签提供界面类型名；若类型不存在，先生成继承框架界面基类的 partial 脚本。
+5. Unity 完成脚本编译和域重载后，挂起任务自动恢复。
+6. 生成器按组件名查找可配置组件目录中的同名 Prefab。
+7. 未找到 Prefab 时，基础组件由内建 uGUI/TMP 工厂创建；未知组件抛出错误。
+8. 生成器按根布局模式规范化根节点：响应式模式使用全屏锚点、零偏移、零位置和单位变换，固定参考模式使用 TSX 有效尺寸或工具配置参考分辨率并居中；随后应用内部 RectTransform、图片 Sprite、文本字号与描边、颜色、交互状态、滑块、切换、滚动和布局组属性。
+9. 带 ScrollRect 的内建或自定义组件使用其实际 Content 作为声明子节点挂载点；普通列表保留条目声明的锚点，简单列表和网格才提供默认布局组。Prefab 子节点声明的布局属性会直接应用到现有 Content。
+10. 生成器把配置的默认 TMP 字体应用到本次生成组件及组件 Prefab 内的 TMP 文本。
+11. `data-bind` 转换为框架绑定标记，根对象添加绑定收集器并重建绑定列表。
+12. Prefab 以界面类型名保存到配置目录。
 
 内建按钮和切换控件始终保留其 TMP 标签对象。节点未声明静态文本时，生成器会把模板占位文本清空，但仍应用字号、颜色、字形、对齐和描边属性，便于后续业务直接填入内容。文本表现属性会沿静态 TSX 父层继承，子节点显式属性优先，可在列表或网格容器上统一定义模板样式。
 
@@ -48,9 +50,9 @@
 
 ## React 预览
 
-预览工程使用 React、TypeScript 和 Vite。入口通过 `import.meta.glob` 自动发现 `Generated` 下的界面。布局运行时读取与 Unity 相同的锚点、轴心、位置和尺寸属性，并将 Unity 的底部原点坐标转换为浏览器顶部原点坐标。Stretch 锚点使用轴心在锚点区间内插值得到参考点，与 RectTransform 一致。
+预览工程使用 React、TypeScript 和 Vite。入口通过 `import.meta.glob` 自动发现 `Generated` 下的界面。Vite 只从 `UNITY_PROJECT_PATH` 环境变量或目标工程 `.env.local` 读取 Unity 项目根目录，不再设置仓库 `Tools/` 默认值；目录缺失或不含 `Assets` 时在启动阶段报错。布局运行时读取与 Unity 相同的锚点、轴心、位置和尺寸属性，并将 Unity 的底部原点坐标转换为浏览器顶部原点坐标。Stretch 锚点使用轴心在锚点区间内插值得到参考点，与 RectTransform 一致。
 
-预览工具提供 750×1680、720×1600、828×1792 和 390×844 四个竖屏设备尺寸。画布按 UIManager 主画布的高度匹配方式保持 1680 逻辑高度，并根据设备宽高比调整逻辑宽度。响应式 Prefab 根节点填充 UIManager 层级，Unity 运行时整体缩放由目标项目的 UIManager CanvasScaler 负责，工具不在 Prefab 内重复添加 Canvas 或手动缩放。
+预览工具提供 750×1680、720×1600、828×1792 和 390×844 四个竖屏设备尺寸。画布按 UIManager 主画布的高度匹配方式保持 1680 逻辑高度，并根据设备宽高比调整逻辑宽度；目标 CanvasScaler 使用 `MatchWidthOrHeight=1`。响应式 Prefab 根节点填充 UIManager 层级，Unity 运行时整体缩放由目标项目的 UIManager CanvasScaler 负责，工具不在 Prefab 内重复添加 Canvas 或手动缩放。
 
 若界面选择固定参考布局，应在根标签声明 `data-layout-mode="FixedReference"`，使 Unity 生成和 React 预览同时保持固定参考尺寸；未声明时由工具配置决定 Unity 生成模式，React 预览按响应式模式处理。
 
@@ -64,7 +66,7 @@
 
 ## 验收边界
 
-发布目录只验证工具程序集编译、静态 TSX 解析、Prefab 生成和 React 预览构建。GameLauncher、UIManager 挂载、字体、组件 Prefab 和资源系统的运行时验收必须在目标项目中完成。
+发布目录只验证工具程序集编译、静态 TSX 解析、Prefab 生成和 React 预览构建。GameLauncher、UIManager 挂载、字体、组件 Prefab 和资源系统的运行时验收必须在目标项目中完成；目标项目应覆盖 750×1680、720×1600、828×1792 和 390×844，并检查 `GameMenu_MainPage` 的 `RectTransform.rect` 与 `Layer_50` 一致。
 
 ## 已知限制
 

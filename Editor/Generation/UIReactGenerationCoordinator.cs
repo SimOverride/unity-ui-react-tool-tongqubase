@@ -1,5 +1,6 @@
 using System;
 using UIReactTool.Parsing;
+using UIReactTool.Preview;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
@@ -23,6 +24,7 @@ namespace UIReactTool.Generation
         {
             UIReactToolSettings settings = UIReactToolSettings.instance;
             settings.SaveSettings();
+            UIReactPreviewTemplate.Validate(settings.ReactRootPath);
             UIReactDocument document = UIReactParser.ParseFile(sourcePath);
             Type viewType = UIReactPrefabGenerator.ResolveViewType(document.DialogName, settings.GeneratedNamespace);
 
