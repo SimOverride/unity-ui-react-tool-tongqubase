@@ -20,8 +20,24 @@ function displayName(path: string): string {
   return path.split('/').pop()?.replace(/\.tsx$/, '') ?? path
 }
 
+// 当前验收范围只展示主菜单；通过环境变量可以为其他项目显式指定预览页面。
+const configuredPreviewNames = (import.meta.env.VITE_UIREACT_PREVIEW_PAGES ?? '')
+  .split(',')
+  .map((name: string) => name.trim())
+  .filter(Boolean)
+const defaultPreviewNames = ['GameMenu']
+
 function App() {
-  const entries = useMemo(() => Object.entries(componentModules), [])
+  const entries = useMemo(() => {
+    const allEntries = Object.entries(componentModules)
+    const previewNames = configuredPreviewNames.length > 0
+      ? configuredPreviewNames
+      : defaultPreviewNames
+    const filteredEntries = allEntries.filter(([path]) => previewNames.includes(displayName(path)))
+
+    // 配置页面名不存在时保留全部模板，避免迁移到新项目后预览区域为空。
+    return filteredEntries.length > 0 ? filteredEntries : allEntries
+  }, [])
   const [selectedPath, setSelectedPath] = useState(entries[0]?.[0] ?? '')
   const [resolutionIndex, setResolutionIndex] = useState(0)
   const [previewScale, setPreviewScale] = useState(0.5)

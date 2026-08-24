@@ -329,7 +329,10 @@ namespace UIReactTool.Generation
 
             if (UIReactValueParser.TryFloat(node.GetAttribute("data-alpha"), out float alpha))
             {
-                CanvasGroup canvasGroup = gameObject.GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+                // Unity 的 Component 使用重载的 null 判断；不能用 ?? 掩盖已失效的组件代理，否则访问 alpha 会抛出 MissingComponentException。
+                CanvasGroup canvasGroup = gameObject.GetComponent<CanvasGroup>();
+                if (canvasGroup == null)
+                    canvasGroup = gameObject.AddComponent<CanvasGroup>();
                 canvasGroup.alpha = Mathf.Clamp01(alpha);
             }
         }
