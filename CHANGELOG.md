@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-08-24
+
+### 修复
+
+- `.unitypackage` 安装到 `Assets/UIReactTool` 后可以正确定位并初始化 ReactPreview 模板。
+- npm 启动命令按编辑器平台选择：Windows 使用 `npm.cmd`，macOS 和 Linux 使用 `npm`。
+
 ## 2026-08-18
 
 ### 变更

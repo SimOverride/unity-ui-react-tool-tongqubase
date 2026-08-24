@@ -91,6 +91,10 @@ namespace UIReactTool.Preview
             }
 
             string unityProjectRoot = GetUnityProjectRoot();
+            string assetTemplate = Path.Combine(unityProjectRoot, "Assets", "UIReactTool", "ReactPreview");
+            if (Directory.Exists(assetTemplate))
+                return NormalizePath(assetTemplate);
+
             string workspaceRoot = Directory.GetParent(unityProjectRoot)?.FullName ?? unityProjectRoot;
             string workspaceTemplate = Path.Combine(workspaceRoot, "UIReactTool", "ReactPreview");
             if (Directory.Exists(workspaceTemplate))
