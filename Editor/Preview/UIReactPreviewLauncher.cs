@@ -37,7 +37,7 @@ namespace UIReactTool.Preview
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "npm.cmd",
+                FileName = GetNpmExecutableName(Application.platform),
                 Arguments = arguments,
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = false,
@@ -72,10 +72,14 @@ namespace UIReactTool.Preview
             return process;
         }
 
+        internal static string GetNpmExecutableName(RuntimePlatform platform)
+        {
+            return platform == RuntimePlatform.WindowsEditor ? "npm.cmd" : "npm";
+        }
+
         private static void ValidateProject(string reactRootPath)
         {
             UIReactPreviewTemplate.Validate(reactRootPath);
         }
     }
 }
-
