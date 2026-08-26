@@ -136,6 +136,8 @@ if ($Direction -eq 'ToRelease') {
         Copy-FileIfExists -Source (Join-Path $testReactRoot $file) -Destination (Join-Path $releaseReactRoot $file)
     }
 
+    Copy-FileIfExists -Source (Join-Path $testReactRoot 'editor-server\source-editor.mjs') -Destination (Join-Path $releaseReactRoot 'editor-server\source-editor.mjs')
+
     Copy-DirectoryContent -Source (Join-Path $testReactRoot 'src') -Destination (Join-Path $releaseReactRoot 'src')
     Copy-FileIfExists -Source (Join-Path $testReactRoot 'Acceptance\SampleDialog.tsx') -Destination (Join-Path $releaseReactRoot 'Generated\SampleDialog\SampleDialog.tsx')
 }
@@ -145,6 +147,8 @@ else {
     foreach ($file in @('index.html', 'package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts')) {
         Copy-FileIfExists -Source (Join-Path $releaseReactRoot $file) -Destination (Join-Path $testReactRoot $file)
     }
+
+    Copy-FileIfExists -Source (Join-Path $releaseReactRoot 'editor-server\source-editor.mjs') -Destination (Join-Path $testReactRoot 'editor-server\source-editor.mjs')
 
     Copy-DirectoryContent -Source (Join-Path $releaseReactRoot 'src') -Destination (Join-Path $testReactRoot 'src')
     Copy-FileIfExists -Source (Join-Path $releaseReactRoot 'Generated\SampleDialog\SampleDialog.tsx') -Destination (Join-Path $testReactRoot 'Acceptance\SampleDialog.tsx')

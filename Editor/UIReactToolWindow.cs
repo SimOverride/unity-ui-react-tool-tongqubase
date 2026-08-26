@@ -60,9 +60,19 @@ namespace UIReactTool
             int rootLayoutModeIndex = Mathf.Clamp((int)settings.RootLayoutMode, 0, rootLayoutModeLabels.Length - 1);
             rootLayoutModeIndex = EditorGUILayout.Popup("根布局模式", rootLayoutModeIndex, rootLayoutModeLabels);
             settings.RootLayoutMode = (UIReactRootLayoutMode)Mathf.Clamp(rootLayoutModeIndex, 0, rootLayoutModeLabels.Length - 1);
+            string[] viewModeLabels = { "普通 UIView（轻量）", "MVVM（状态驱动）" };
+            int viewModeIndex = Mathf.Clamp((int)settings.ViewMode, 0, viewModeLabels.Length - 1);
+            viewModeIndex = EditorGUILayout.Popup("界面模式", viewModeIndex, viewModeLabels);
+            settings.ViewMode = (UIReactViewMode)Mathf.Clamp(viewModeIndex, 0, viewModeLabels.Length - 1);
             settings.PreviewPort = EditorGUILayout.IntField("预览端口", settings.PreviewPort);
             if (EditorGUI.EndChangeCheck())
                 settings.SaveSettings();
+
+            EditorGUILayout.HelpBox(
+                settings.ViewMode == UIReactViewMode.Mvvm
+                    ? "MVVM 适合长期持有业务状态、频繁响应数据变化或需要独立测试状态逻辑的界面。"
+                    : "普通 UIView 适合弹窗、菜单和局部交互；没有明确状态模型需求时优先使用此模式。",
+                MessageType.None);
 
             if (GUILayout.Button("按工具白名单初始化 ReactPreview 模板", GUILayout.Height(24f)))
                 Execute(() => InitializePreviewTemplate(settings));
@@ -99,6 +109,7 @@ namespace UIReactTool
                 "默认自动获取：生成节点自身的 RectTransform 和组件。\n" +
                 "ReactPreview 应使用上方初始化按钮创建；工具只复制 package.json、src 和示例 TSX，不复制 node_modules、dist、缓存或测试业务页面，并写入初始化标记和当前项目 .env.local。\n" +
                 "手动配置：React 工程目录、Prefab 输出目录、UIView 脚本目录、组件 Prefab 目录、默认 TMP 字体、参考分辨率和根布局模式。\n" +
+                "界面模式可由 UIRootPanel 的 data-view-mode 覆盖；data-bind-type 可显式选择绑定组件类型。\n" +
                 "自定义组件必须在组件目录中提供与 data-component 同名的 Prefab。",
                 MessageType.None);
 

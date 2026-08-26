@@ -1,9 +1,13 @@
-import { createReadStream, existsSync, readFileSync, readdirSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { createReadStream, existsSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { extname, relative, resolve, sep } from 'node:path'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { applySourcePatches, SourceEditError, sourceVersion } from './editor-server/source-editor.mjs'
 
 const generatedRoot = resolve(__dirname, 'Generated')
+const templateMarkerPath = resolve(__dirname, '.uirect-template.json')
+const templateMarkerContent = '{"template":"UIReactTool.ReactPreview","schemaVersion":1}'
 
 // 资源目录必须由目标 Unity 项目显式提供，不能使用模板仓库的回退路径。
 function resolveUnityProjectRoot(mode: string): string {
@@ -89,9 +93,130 @@ function unityAssetsPlugin(unityAssetsRoot: string): Plugin {
   }
 }
 
+function writeJson(response: import('node:http').ServerResponse, statusCode: number, body: object): void {
+  response.statusCode = statusCode
+  response.setHeader('Content-Type', 'application/json; charset=utf-8')
+  response.end(JSON.stringify(body))
+}
+
+function requireInitializedTemplate(): void {
+  if (!existsSync(templateMarkerPath) || readFileSync(templateMarkerPath, 'utf8').trim() !== templateMarkerContent) {
+    throw new SourceEditError(
+      'TEMPLATE_NOT_INITIALIZED',
+      '当前 React 工程不是由 UI React 工具初始化的可写模板，检查面板将保持只读。',
+    )
+  }
+}
+
+function resolveEditablePage(pagePath: unknown): string {
+  if (typeof pagePath !== 'string' || !pagePath.trim())
+    throw new SourceEditError('INVALID_PAGE', '缺少需要编辑的 TSX 页面路径。')
+
+  const normalized = pagePath.replace(/\\/g, '/')
+  const generatedIndex = normalized.indexOf('Generated/')
+  if (generatedIndex < 0)
+    throw new SourceEditError('INVALID_PAGE', '只能编辑 Generated 目录中的 TSX 页面。')
+
+  const relativePagePath = normalized.slice(generatedIndex + 'Generated/'.length)
+  const targetPath = resolve(generatedRoot, relativePagePath)
+  const relativePath = relative(generatedRoot, targetPath)
+  if (!relativePath || relativePath.startsWith('..' + sep) || relativePath === '..' || extname(targetPath).toLowerCase() !== '.tsx')
+    throw new SourceEditError('INVALID_PAGE', '页面路径超出 Generated 目录或不是 TSX 文件。')
+  if (!existsSync(targetPath))
+    throw new SourceEditError('PAGE_NOT_FOUND', `找不到需要编辑的页面：${relativePagePath}`)
+  return targetPath
+}
+
+async function readJsonBody(request: import('node:http').IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = []
+  let byteLength = 0
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    byteLength += buffer.length
+    if (byteLength > 256 * 1024)
+      throw new SourceEditError('REQUEST_TOO_LARGE', '保存请求过大。')
+    chunks.push(buffer)
+  }
+
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+  } catch {
+    throw new SourceEditError('INVALID_JSON', '保存请求不是有效 JSON。')
+  }
+}
+
+function errorStatus(error: unknown): number {
+  if (error instanceof SourceEditError && error.code === 'SOURCE_CHANGED') return 409
+  if (error instanceof SourceEditError && error.code === 'TEMPLATE_NOT_INITIALIZED') return 403
+  if (error instanceof SourceEditError && error.code === 'PAGE_NOT_FOUND') return 404
+  return 400
+}
+
+function sourceEditorPlugin(): Plugin {
+  return {
+    name: 'unity-react-source-editor',
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1')
+        if (requestUrl.pathname !== '/__uirect/editor/page' && requestUrl.pathname !== '/__uirect/editor/save') {
+          next()
+          return
+        }
+
+        try {
+          requireInitializedTemplate()
+          if (requestUrl.pathname === '/__uirect/editor/page') {
+            if (request.method !== 'GET')
+              throw new SourceEditError('INVALID_METHOD', '页面版本接口只接受 GET 请求。')
+            const pagePath = resolveEditablePage(requestUrl.searchParams.get('path'))
+            const source = readFileSync(pagePath, 'utf8')
+            writeJson(response, 200, { version: sourceVersion(source) })
+            return
+          }
+
+          if (request.method !== 'POST')
+            throw new SourceEditError('INVALID_METHOD', '源码保存接口只接受 POST 请求。')
+          const body = await readJsonBody(request) as {
+            pagePath?: unknown
+            expectedVersion?: unknown
+            patches?: unknown
+          }
+          const pagePath = resolveEditablePage(body.pagePath)
+          const source = readFileSync(pagePath, 'utf8')
+          if (typeof body.expectedVersion !== 'string' || sourceVersion(source) !== body.expectedVersion) {
+            throw new SourceEditError(
+              'SOURCE_CHANGED',
+              'TSX 已被 IDE、Agent 或其他预览窗口修改。请放弃当前草稿并重新加载页面。',
+            )
+          }
+
+          const nextSource = applySourcePatches(source, body.patches)
+          const changed = nextSource !== source
+          if (changed) {
+            // 先写入同目录临时文件再替换，避免 Vite 或 Unity 读取到半截源码。
+            const temporaryPath = `${pagePath}.uirect-${randomUUID()}.tmp`
+            try {
+              writeFileSync(temporaryPath, nextSource, 'utf8')
+              renameSync(temporaryPath, pagePath)
+            } finally {
+              if (existsSync(temporaryPath)) unlinkSync(temporaryPath)
+            }
+          }
+
+          writeJson(response, 200, { changed, version: sourceVersion(nextSource) })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '未知的 TSX 写回错误。'
+          const code = error instanceof SourceEditError ? error.code : 'SOURCE_EDIT_FAILED'
+          writeJson(response, errorStatus(error), { code, message })
+        }
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const unityProjectRoot = resolveUnityProjectRoot(mode)
   return {
-    plugins: [react(), unityAssetsPlugin(resolve(unityProjectRoot, 'Assets'))],
+    plugins: [react(), unityAssetsPlugin(resolve(unityProjectRoot, 'Assets')), sourceEditorPlugin()],
   }
 })

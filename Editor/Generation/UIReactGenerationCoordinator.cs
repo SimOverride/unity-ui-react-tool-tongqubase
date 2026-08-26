@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UIReactTool.Parsing;
 using UIReactTool.Preview;
 using UnityEditor;
@@ -26,19 +27,22 @@ namespace UIReactTool.Generation
             settings.SaveSettings();
             UIReactPreviewTemplate.Validate(settings.ReactRootPath);
             UIReactDocument document = UIReactParser.ParseFile(sourcePath);
+            UIReactViewMode viewMode = UIReactPrefabGenerator.ResolveViewMode(document, settings);
             Type viewType = UIReactPrefabGenerator.ResolveViewType(document.DialogName, settings.GeneratedNamespace);
 
             if (viewType == null)
             {
-                UIReactPrefabGenerator.EnsureViewScript(document.DialogName, settings);
+                IReadOnlyList<string> createdScripts = UIReactPrefabGenerator.EnsureViewScripts(document.DialogName, viewMode, settings);
+                if (createdScripts.Count == 0)
+                    throw new InvalidOperationException($"界面类型 {document.DialogName} 尚未编译，但对应脚本已经存在。请先修复 Unity 编译错误。");
                 SessionState.SetString(PendingRequestKey, JsonUtility.ToJson(new PendingRequest { SourcePath = sourcePath }));
                 AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
                 if (showDialog)
-                    EditorUtility.DisplayDialog("UI React 工具", "已创建 UIView 脚本。Unity 编译完成后会自动继续生成 Prefab。", "确定");
+                    EditorUtility.DisplayDialog("UI React 工具", "已创建界面脚本。Unity 编译完成后会自动继续生成 Prefab。", "确定");
                 return string.Empty;
             }
 
-            string prefabPath = UIReactPrefabGenerator.Generate(document, viewType, settings);
+            string prefabPath = UIReactPrefabGenerator.Generate(document, viewType, viewMode, settings);
             if (showDialog)
                 EditorUtility.DisplayDialog("UI React 工具", "Prefab 生成完成：\n" + prefabPath, "确定");
             return prefabPath;

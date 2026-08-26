@@ -6,6 +6,22 @@ using UnityEngine;
 namespace UIReactTool
 {
     /// <summary>
+    /// 生成界面接入 TongquBase 的运行模式。
+    /// </summary>
+    public enum UIReactViewMode
+    {
+        /// <summary>
+        /// 适合只包含局部交互、无需独立状态模型的轻量界面。
+        /// </summary>
+        Plain,
+
+        /// <summary>
+        /// 适合状态持续变化、需要数据绑定或需要独立测试业务状态的界面。
+        /// </summary>
+        Mvvm
+    }
+
+    /// <summary>
     /// 生成界面根节点在父级 UI 层中的布局策略。
     /// </summary>
     public enum UIReactRootLayoutMode
@@ -35,6 +51,7 @@ namespace UIReactTool
         [SerializeField] private TMP_FontAsset defaultTmpFont;
         [SerializeField] private Vector2 referenceResolution = new Vector2(750f, 1680f);
         [SerializeField] private UIReactRootLayoutMode rootLayoutMode = UIReactRootLayoutMode.Responsive;
+        [SerializeField] private UIReactViewMode viewMode = UIReactViewMode.Plain;
         [SerializeField] private int previewPort = 4173;
 
         public string ReactRootPath
@@ -105,6 +122,12 @@ namespace UIReactTool
         {
             get => rootLayoutMode;
             set => rootLayoutMode = value;
+        }
+
+        public UIReactViewMode ViewMode
+        {
+            get => viewMode;
+            set => viewMode = value;
         }
 
         public int PreviewPort

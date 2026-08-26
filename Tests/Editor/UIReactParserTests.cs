@@ -15,7 +15,7 @@ namespace UIReactTool.Tests
 export default function TestDialog() {
   return (
     <main data-name=""Root"" data-component=""UIRootPanel"" data-dialog-name=""TestDialog"" data-pos=""(0, 0, 0)"" data-size=""(750, 1680)"">
-      <button data-name=""ConfirmButton"" data-component=""UIButton"" data-bind=""_confirmButton"" data-sprite=""Assets/Arts/UI/confirm.png"" data-font-size=""28"" data-pos=""(0, 0, 0)"" data-size=""(200, 60)"" data-text=""确认"">确认</button>
+      <button data-name=""ConfirmButton"" data-component=""UIButton"" data-bind=""_confirmButton"" data-bind-type=""Button"" data-sprite=""Assets/Arts/UI/confirm.png"" data-font-size=""28"" data-pos=""(0, 0, 0)"" data-size=""(200, 60)"" data-text=""确认"">确认</button>
     </main>
   )
 }";
@@ -28,6 +28,7 @@ export default function TestDialog() {
             Assert.AreEqual("UIButton", document.Root.Children[0].ComponentName);
             Assert.AreEqual("确认", document.Root.Children[0].Text);
             Assert.AreEqual("_confirmButton", document.Root.Children[0].GetAttribute("data-bind"));
+            Assert.AreEqual("Button", document.Root.Children[0].GetAttribute("data-bind-type"));
             Assert.AreEqual("Assets/Arts/UI/confirm.png", document.Root.Children[0].GetAttribute("data-sprite"));
             Assert.AreEqual("28", document.Root.Children[0].GetAttribute("data-font-size"));
         }

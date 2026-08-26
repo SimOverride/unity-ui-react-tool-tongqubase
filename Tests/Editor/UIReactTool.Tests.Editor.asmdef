@@ -2,7 +2,8 @@
   "name": "UIReactTool.Tests.Editor",
   "rootNamespace": "UIReactTool.Tests",
   "references": [
-    "UIReactTool.Editor"
+    "UIReactTool.Editor",
+    "TongquBase"
   ],
   "optionalUnityReferences": [
     "TestAssemblies"

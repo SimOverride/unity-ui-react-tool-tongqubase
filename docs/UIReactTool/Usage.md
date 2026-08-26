@@ -44,6 +44,7 @@
 - 组件 Prefab 目录：`Assets/FrameworkAsset/UI/Component`。
 - 默认 TMP 字体：由目标项目在工具窗口中选择。
 - Prefab 参考分辨率：`750×1680`。
+- 界面模式：`Plain`。
 - 预览端口：`4173`。
 
 以上目录均可在窗口中修改。Unity 内目录必须以 `Assets` 开头；React 工程目录使用绝对路径。
@@ -56,6 +57,7 @@
 
 - `data-name`
 - `data-dialog-name`
+- 根节点可使用 `data-view-mode="Plain"` 或 `data-view-mode="Mvvm"` 覆盖工具窗口的界面模式
 - 根节点可使用 `data-layout-mode="Responsive"` 或 `data-layout-mode="FixedReference"` 覆盖工具窗口的根布局模式；未声明时使用工具窗口配置
 - `data-pos="(0, 0, 0)"`
 - 响应式根节点使用 Stretch 锚点和零偏移填充挂载层；固定参考根节点使用有效 `data-size`，未声明时回退到工具配置的参考分辨率
@@ -63,6 +65,21 @@
 每个生成控件必须声明静态 `data-name`、`data-component`、`data-pos` 和 `data-size`。需要逻辑访问的控件添加 `data-bind`。
 
 Unity 使用的属性必须是字符串字面量。组件函数可以包含 Hooks、事件和预览状态，但花括号表达式、条件节点、模板字符串及 `.map()` 结果不会进入 Unity 基础模板；需要生成的层级必须静态写在根面板下。
+
+没有独立状态模型需求时使用 `Plain`；长期持有业务状态、频繁响应数据变化或需要独立测试状态逻辑时使用 `Mvvm`。MVVM 模式首次生成会创建 `<Dialog>`、`<Dialog>ViewModel` 和 `<Dialog>Model` 三个 partial 类型骨架。
+
+`data-bind` 默认按节点上的常用组件自动识别。需要明确目标时添加 `data-bind-type`，可选框架类型包括 `GameObject`、`Transform`、`RectTransform`、`Button`、`Image`、`RawImage`、`Text`、`Toggle`、`Slider`、`ScrollRect`、`InputField`、`CanvasGroup`、`Animator`、`TMPText`、`TMPInputField` 和 `TMPDropdown`。项目组件可直接填写完整类型名：
+
+```tsx
+<div
+  data-name="InventoryCell"
+  data-component="UIInventoryCell"
+  data-bind="_inventoryCell"
+  data-bind-type="Game.UI.InventoryCell"
+/>
+```
+
+也可以写成 `data-bind-type="Custom" data-bind-custom-type="Game.UI.InventoryCell"`。显式类型不存在或组件 Prefab 的节点上没有该组件时，生成会直接报错。
 
 列表和网格的静态子节点会自动挂入组件的滚动 Content。组件 Prefab 必须正确配置 ScrollRect 的 Content 引用。普通列表保留条目锚点；需要自动纵向排列时使用简单列表或显式声明纵向布局。需要设置 Content 尺寸、轴心或锚点时，使用 `data-prefab-child-path="Viewport/Content"` 描述该已有子节点；Prefab 子节点也可以声明 `data-layout-group="Vertical"` 或 `data-layout-group="Grid"`。
 
@@ -78,7 +95,7 @@ TMP 文本可以使用 `data-font-size`、`data-font-style`、`data-enable-word-
 
 1. 在“TSX 文件”中选择目标 `.tsx`。
 2. 点击“生成或更新 Prefab”。
-3. 若界面脚本不存在，工具先生成脚本并等待 Unity 编译。
+3. 若界面脚本不存在，工具按页面模式生成普通界面脚本或 MVVM 三类型脚本，并等待 Unity 编译。
 4. 编译完成后工具自动继续生成 Prefab。
 5. 在配置的输出目录检查同名 Prefab。
 
@@ -103,6 +120,19 @@ npm run dev
 
 发布模板默认包含 `SampleDialog` 静态示例；业务项目可以在 `Generated` 下添加自己的 TSX 界面。
 
+### 使用网页画布调整 TSX
+
+预览右侧“UI 设计与检查”面板支持检查与画布编辑双模式：
+
+1. 点击“开启画布编辑”，然后在层级或画布中选择节点。只有具有唯一静态 `data-name` 的节点可以写回。
+2. 直接拖动节点改变位置，或拖动八个尺寸手柄调整边界。移动和尺寸边缘默认吸附到 5 像素网格、画布、父级和同级节点参考线；按住 Alt 可临时关闭吸附。
+3. 使用方向键微调 1 个逻辑像素，按住 Shift 时每次移动 10 个逻辑像素。右侧“精确调整”仍可修改锚点、轴心、视觉、状态、绑定和布局组属性。
+4. 使用滚轮或顶部按钮缩放画布；按住空格拖动或使用中键拖动可平移，点击“适应”恢复自动比例。缩放和平移不会修改 TSX。
+5. 使用“撤销”“重做”或“放弃”管理当前页面草稿；一次拖动或缩放只占一条撤销记录。切换页面或关闭标签前，工具会提示未保存修改。
+6. 点击“保存 TSX”后，工具只更新 `Generated` 页面中的目标静态属性；然后回到 Unity 执行“生成或更新 Prefab”。
+
+手动调整必须通过 `npm run dev` 或 Unity 工具的预览启动入口使用；生产构建页面保持只读。根节点、拉伸锚点节点和布局组控制的子节点会在画布中显示锁定原因，当前应使用右侧精确面板处理受支持属性。编辑器不允许修改 `data-name`、`data-component`、界面模式和 JSX 层级，也暂不支持多选、批量对齐或跨父级移动。若 IDE、Agent 或其他预览窗口已经修改同一 TSX，保存会拒绝覆盖；放弃草稿并重新加载页面后再继续。
+
 ## UnityBaseFramework 资源配置
 
 目标项目必须让资源系统收集 Prefab 输出目录，并使用按文件名生成地址的规则。界面类型名、`data-dialog-name` 和 Prefab 文件名必须一致，框架才能通过界面管理器按类型名加载。
@@ -124,6 +154,7 @@ npm run dev
 - 默认 TMP 字体；必须选择目标项目中的 TMP 字体。
 - Prefab 参考分辨率；默认使用 `750×1680`。
 - 根布局模式；默认使用响应式全屏模式。
+- 界面模式；默认使用普通 `UIView`，根节点可以逐页覆盖。
 - 目标项目的 YooAsset 收集目录。
 - 目标项目启动场景中的 UIManager、资源收集配置和验收 Prefab 引用。
 

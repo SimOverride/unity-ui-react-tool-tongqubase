@@ -18,7 +18,8 @@ namespace UIReactTool.Preview
             "package.json",
             "package-lock.json",
             "tsconfig.json",
-            "vite.config.ts"
+            "vite.config.ts",
+            "editor-server/source-editor.mjs"
         };
 
         private const string SourceDirectoryName = "src";

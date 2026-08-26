@@ -33,6 +33,8 @@ namespace UIReactTool.Tests
 
             Assert.That(File.Exists(Path.Combine(targetPath, "package.json")), Is.True);
             Assert.That(File.Exists(Path.Combine(targetPath, "src", "main.tsx")), Is.True);
+            Assert.That(File.Exists(Path.Combine(targetPath, "src", "unity-canvas-editor.tsx")), Is.True);
+            Assert.That(File.Exists(Path.Combine(targetPath, "editor-server", "source-editor.mjs")), Is.True);
             Assert.That(File.Exists(Path.Combine(targetPath, "Generated", "SampleDialog", "SampleDialog.tsx")), Is.True);
             Assert.That(File.Exists(Path.Combine(targetPath, ".uirect-template.json")), Is.True);
             Assert.DoesNotThrow(() => UIReactPreviewTemplate.Validate(targetPath));

@@ -28,7 +28,7 @@ namespace UIReactTool.Generation
 
             ApplyDefaultFont(instance, settings.DefaultTmpFont);
             ApplyAttributes(instance, node, componentName);
-            AddBindingMarker(instance, node, componentName);
+            AddBindingMarker(instance, node);
             return instance;
         }
 
@@ -536,23 +536,45 @@ namespace UIReactTool.Generation
             }
         }
 
-        private static void AddBindingMarker(GameObject gameObject, UIReactNode node, string componentName)
+        private static void AddBindingMarker(GameObject gameObject, UIReactNode node)
         {
             string bindingKey = node.GetAttribute("data-bind");
             if (string.IsNullOrWhiteSpace(bindingKey))
+            {
+                if (node.HasAttribute("data-bind-type") || node.HasAttribute("data-bind-custom-type"))
+                    throw new InvalidDataException($"节点 {gameObject.name} 声明了绑定类型，但缺少 data-bind。");
                 return;
+            }
 
             UIBindMarker marker = gameObject.GetComponent<UIBindMarker>() ?? gameObject.AddComponent<UIBindMarker>();
             marker.Key = bindingKey;
             marker.Comment = "由 UI React 工具根据 data-bind 自动生成。";
 
-            Component target = ResolveBindingTarget(gameObject, componentName, out UIBindComponentType componentType);
+            Component target = ResolveBindingTarget(
+                gameObject,
+                node.GetAttribute("data-bind-type"),
+                node.GetAttribute("data-bind-custom-type"),
+                out UIBindComponentType componentType,
+                out string customTypeName);
             marker.ComponentType = componentType;
+            marker.CustomTypeName = customTypeName;
             marker.TargetComponent = target;
         }
 
-        private static Component ResolveBindingTarget(GameObject gameObject, string componentName, out UIBindComponentType type)
+        private static Component ResolveBindingTarget(
+            GameObject gameObject,
+            string declaredTypeName,
+            string declaredCustomTypeName,
+            out UIBindComponentType type,
+            out string customTypeName)
         {
+            if (!string.IsNullOrWhiteSpace(declaredTypeName) || !string.IsNullOrWhiteSpace(declaredCustomTypeName))
+            {
+                type = ParseBindingType(declaredTypeName, declaredCustomTypeName, out customTypeName);
+                return ResolveExplicitBindingTarget(gameObject, type, customTypeName);
+            }
+
+            customTypeName = string.Empty;
             Button button = gameObject.GetComponent<Button>();
             if (button != null) { type = UIBindComponentType.Button; return button; }
             Toggle toggle = gameObject.GetComponent<Toggle>();
@@ -561,15 +583,98 @@ namespace UIReactTool.Generation
             if (slider != null) { type = UIBindComponentType.Slider; return slider; }
             ScrollRect scroll = gameObject.GetComponent<ScrollRect>();
             if (scroll != null) { type = UIBindComponentType.ScrollRect; return scroll; }
-            TMP_InputField input = gameObject.GetComponent<TMP_InputField>();
-            if (input != null) { type = UIBindComponentType.TMPInputField; return input; }
+            TMP_InputField tmpInput = gameObject.GetComponent<TMP_InputField>();
+            if (tmpInput != null) { type = UIBindComponentType.TMPInputField; return tmpInput; }
+            TMP_Dropdown tmpDropdown = gameObject.GetComponent<TMP_Dropdown>();
+            if (tmpDropdown != null) { type = UIBindComponentType.TMPDropdown; return tmpDropdown; }
+            InputField input = gameObject.GetComponent<InputField>();
+            if (input != null) { type = UIBindComponentType.InputField; return input; }
             TMP_Text text = gameObject.GetComponent<TMP_Text>();
             if (text != null) { type = UIBindComponentType.TMPText; return text; }
+            Text legacyText = gameObject.GetComponent<Text>();
+            if (legacyText != null) { type = UIBindComponentType.Text; return legacyText; }
             Image image = gameObject.GetComponent<Image>();
             if (image != null) { type = UIBindComponentType.Image; return image; }
+            RawImage rawImage = gameObject.GetComponent<RawImage>();
+            if (rawImage != null) { type = UIBindComponentType.RawImage; return rawImage; }
+            CanvasGroup canvasGroup = gameObject.GetComponent<CanvasGroup>();
+            if (canvasGroup != null) { type = UIBindComponentType.CanvasGroup; return canvasGroup; }
+            Animator animator = gameObject.GetComponent<Animator>();
+            if (animator != null) { type = UIBindComponentType.Animator; return animator; }
 
             type = UIBindComponentType.RectTransform;
             return gameObject.GetComponent<RectTransform>();
+        }
+
+        internal static UIBindComponentType ParseBindingType(
+            string declaredTypeName,
+            string declaredCustomTypeName,
+            out string customTypeName)
+        {
+            string typeName = (declaredTypeName ?? string.Empty).Trim();
+            string explicitCustomTypeName = (declaredCustomTypeName ?? string.Empty).Trim();
+
+            if (string.IsNullOrEmpty(typeName))
+            {
+                if (string.IsNullOrEmpty(explicitCustomTypeName))
+                    throw new InvalidDataException("显式 UI 绑定缺少 data-bind-type。");
+
+                customTypeName = explicitCustomTypeName;
+                return UIBindComponentType.Custom;
+            }
+
+            if (Enum.TryParse(typeName, true, out UIBindComponentType parsedType) &&
+                Enum.IsDefined(typeof(UIBindComponentType), parsedType))
+            {
+                if (parsedType == UIBindComponentType.Custom)
+                {
+                    if (string.IsNullOrEmpty(explicitCustomTypeName))
+                        throw new InvalidDataException("data-bind-type=\"Custom\" 时必须声明 data-bind-custom-type。");
+                    customTypeName = explicitCustomTypeName;
+                }
+                else
+                {
+                    if (!string.IsNullOrEmpty(explicitCustomTypeName))
+                        throw new InvalidDataException("data-bind-custom-type 只能与 Custom 绑定类型一起使用。");
+                    customTypeName = string.Empty;
+                }
+
+                return parsedType;
+            }
+
+            if (!string.IsNullOrEmpty(explicitCustomTypeName))
+                throw new InvalidDataException("完整自定义组件类型应直接写入 data-bind-type，不能同时声明 data-bind-custom-type。");
+
+            // 未命中框架枚举时，把完整类型名作为项目自定义组件处理。
+            customTypeName = typeName;
+            return UIBindComponentType.Custom;
+        }
+
+        private static Component ResolveExplicitBindingTarget(
+            GameObject gameObject,
+            UIBindComponentType componentType,
+            string customTypeName)
+        {
+            if (componentType == UIBindComponentType.GameObject)
+                return null;
+            if (componentType == UIBindComponentType.Transform)
+                return gameObject.transform;
+
+            Type targetType = componentType.ToComponentType(customTypeName);
+            if (targetType == null || !typeof(Component).IsAssignableFrom(targetType))
+            {
+                string requestedType = componentType == UIBindComponentType.Custom ? customTypeName : componentType.ToString();
+                throw new InvalidDataException($"无法解析 UI 绑定组件类型：{requestedType}");
+            }
+
+            Component target = gameObject.GetComponent(targetType);
+            if (target == null)
+            {
+                string requestedType = componentType == UIBindComponentType.Custom ? customTypeName : componentType.ToString();
+                throw new MissingComponentException($"节点 {gameObject.name} 上不存在显式绑定要求的组件：{requestedType}");
+            }
+
+            return target;
         }
 
         private static TextAlignmentOptions ParseAlignment(string horizontal, string vertical, TextAlignmentOptions fallback)
