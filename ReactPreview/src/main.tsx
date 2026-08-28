@@ -22,8 +22,13 @@ import.meta.glob('../Generated/**/*.css', { eager: true })
 const resolutions = [
   { name: '设计基准', width: 750, height: 1680 },
   { name: '窄屏测试', width: 720, height: 1600 },
-  { name: '宽屏测试', width: 828, height: 1792 },
+  { name: '大屏手机', width: 828, height: 1792 },
   { name: '手机逻辑像素', width: 390, height: 844 },
+  { name: '平板竖屏 3:4', width: 1536, height: 2048 },
+  { name: '平板横屏 4:3', width: 2048, height: 1536 },
+  { name: '桌面宽屏 16:9', width: 1920, height: 1080 },
+  { name: '桌面宽屏 16:10', width: 1920, height: 1200 },
+  { name: '桌面超宽屏 21:9', width: 2560, height: 1080 },
 ]
 
 function displayName(path: string): string {
@@ -74,7 +79,7 @@ function App() {
     setCanvasElement(element)
   }, [])
 
-  // UIManager 的主画布按高度匹配 750×1680；不同竖屏只改变逻辑画布宽度。
+  // UIManager 的主画布按高度匹配 750×1680；横竖屏测试都以实际宽高比换算逻辑画布宽度。
   const canvasWidthReference = 750
   const canvasHeight = 1680
   const canvasWidth = resolution.width / (resolution.height / canvasHeight)

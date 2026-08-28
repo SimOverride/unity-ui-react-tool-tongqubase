@@ -8,11 +8,21 @@ import {
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
+import {
+  clamp01,
+  formatUnityVector,
+  preserveRectWithAnchors,
+  readUnityAnchorLayout,
+  type UnityAnchorLayout,
+  type UnityAnchors,
+  type UnityPoint,
+} from './unity-anchor'
 
 type Point = [number, number]
 type Vector3 = [number, number, number]
 type Vector4 = [number, number, number, number]
 type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
+type AnchorHandle = 'point' | 'min' | 'max'
 
 export type CanvasAttributeValue = string | null
 
@@ -34,6 +44,14 @@ interface CanvasGuide {
   position: number
 }
 
+interface AnchorVisual {
+  min: Point
+  max: Point
+  pivot: Point
+  range: CanvasBounds
+  pointAnchored: boolean
+}
+
 interface PointerSnapshot {
   clientX: number
   clientY: number
@@ -41,18 +59,20 @@ interface PointerSnapshot {
 }
 
 interface CanvasInteraction {
-  kind: 'move' | 'resize'
+  kind: 'move' | 'resize' | 'anchor' | 'pivot'
   pointerId: number
   element: HTMLElement
   handle?: ResizeHandle
+  anchorHandle?: AnchorHandle
   startClient: Point
   scale: Point
   startBounds: CanvasBounds
+  parentBounds: CanvasBounds
+  startLayout: UnityAnchorLayout
   startPosition: Vector3
   startSize: Point
   pivot: Point
-  beforePosition: CanvasAttributeValue
-  beforeSize: CanvasAttributeValue
+  beforeAttributes: Record<string, CanvasAttributeValue>
   xGuides: number[]
   yGuides: number[]
 }
@@ -141,13 +161,6 @@ function collectGuideValues(element: HTMLElement, canvas: HTMLElement): { x: num
   return { x: uniqueValues(x), y: uniqueValues(y) }
 }
 
-function pointAnchored(element: HTMLElement): boolean {
-  const anchors = parseVector(element.dataset.anchors, 4, [0.5, 0.5, 0.5, 0.5])
-  const anchorMin = parseVector(element.dataset.anchorMin, 2, [anchors[0], anchors[1]])
-  const anchorMax = parseVector(element.dataset.anchorMax, 2, [anchors[2], anchors[3]])
-  return Math.abs(anchorMin[0] - anchorMax[0]) < 0.0001 && Math.abs(anchorMin[1] - anchorMax[1]) < 0.0001
-}
-
 function editBlockReason(element: HTMLElement, canvas: HTMLElement): string {
   const sourceName = element.getAttribute('data-name')
   if (!sourceName) return '节点缺少静态 data-name，只能检查。'
@@ -162,9 +175,86 @@ function editBlockReason(element: HTMLElement, canvas: HTMLElement): string {
   const parent = element.parentElement?.closest<HTMLElement>(nodeSelector) ?? null
   if (parent?.dataset.layoutGroup)
     return `当前节点由父级 ${parent.dataset.layoutGroup} 布局组控制，请调整布局组参数。`
-  if (!pointAnchored(element))
-    return '当前首版画布只直接调整点锚定节点；拉伸锚点请使用右侧精确布局。'
+  if (!readUnityAnchorLayout(element))
+    return '父级预览尺寸不可用，当前节点只能检查。'
   return ''
+}
+
+function anchorVisualFor(
+  element: HTMLElement,
+  canvas: HTMLElement,
+  selectionBounds: CanvasBounds,
+): AnchorVisual | null {
+  const parent = element.parentElement?.closest<HTMLElement>(nodeSelector) ?? null
+  const layout = readUnityAnchorLayout(element)
+  if (!parent || !layout) return null
+
+  const parentBounds = logicalBounds(parent, canvas)
+  const min: Point = [
+    parentBounds.left + parentBounds.width * layout.anchors[0],
+    parentBounds.top + parentBounds.height * (1 - layout.anchors[1]),
+  ]
+  const max: Point = [
+    parentBounds.left + parentBounds.width * layout.anchors[2],
+    parentBounds.top + parentBounds.height * (1 - layout.anchors[3]),
+  ]
+  return {
+    min,
+    max,
+    pivot: [
+      selectionBounds.left + selectionBounds.width * layout.pivot[0],
+      selectionBounds.top + selectionBounds.height * (1 - layout.pivot[1]),
+    ],
+    range: {
+      left: Math.min(min[0], max[0]),
+      top: Math.min(min[1], max[1]),
+      width: Math.abs(max[0] - min[0]),
+      height: Math.abs(max[1] - min[1]),
+    },
+    pointAnchored: Math.abs(min[0] - max[0]) < 0.0001 && Math.abs(min[1] - max[1]) < 0.0001,
+  }
+}
+
+function interactionAttributes(kind: CanvasInteraction['kind']): string[] {
+  if (kind === 'move') return ['data-pos']
+  if (kind === 'resize') return ['data-pos', 'data-size']
+  if (kind === 'pivot') return ['data-pivot', 'data-pos', 'data-size']
+  return ['data-anchors', 'data-anchor-min', 'data-anchor-max', 'data-pos', 'data-size']
+}
+
+function changesForLayout(
+  interaction: CanvasInteraction,
+  layout: UnityAnchorLayout,
+): CanvasAttributeChange[] {
+  const values: Record<string, string> = {
+    'data-pos': formatVector(layout.position),
+    'data-size': formatVector(layout.size),
+    'data-pivot': formatUnityVector(layout.pivot),
+  }
+  const hasSplitAnchors = interaction.beforeAttributes['data-anchor-min'] !== null ||
+    interaction.beforeAttributes['data-anchor-max'] !== null
+  if (!hasSplitAnchors || interaction.beforeAttributes['data-anchors'] !== null)
+    values['data-anchors'] = formatUnityVector(layout.anchors)
+  if (hasSplitAnchors) {
+    values['data-anchor-min'] = formatUnityVector([layout.anchors[0], layout.anchors[1]])
+    values['data-anchor-max'] = formatUnityVector([layout.anchors[2], layout.anchors[3]])
+  }
+
+  return interactionAttributes(interaction.kind)
+    .filter((attribute) => Object.prototype.hasOwnProperty.call(values, attribute))
+    .map((attribute) => ({
+      attribute,
+      before: interaction.beforeAttributes[attribute] ?? null,
+      after: values[attribute],
+    }))
+}
+
+function snapAnchorValue(value: number, parentSize: number, scale: number, disabled: boolean): number {
+  const clamped = clamp01(value)
+  if (disabled) return clamped
+  const threshold = 8 / Math.max(1, parentSize * scale)
+  const candidate = [0, 0.5, 1].find((anchor) => Math.abs(anchor - clamped) <= threshold)
+  return candidate ?? clamped
 }
 
 function snapAxis(
@@ -241,6 +331,7 @@ export function UnityCanvasEditor({
   onMessage,
 }: UnityCanvasEditorProps): ReactNode {
   const [selectionBounds, setSelectionBounds] = useState<CanvasBounds | null>(null)
+  const [anchorVisual, setAnchorVisual] = useState<AnchorVisual | null>(null)
   const [guides, setGuides] = useState<CanvasGuide[]>([])
   const [blockReason, setBlockReason] = useState('')
   const interactionRef = useRef<CanvasInteraction | null>(null)
@@ -250,10 +341,13 @@ export function UnityCanvasEditor({
   const measureSelection = useCallback(() => {
     if (!canvas || !selectedElement || !canvas.contains(selectedElement)) {
       setSelectionBounds(null)
+      setAnchorVisual(null)
       setBlockReason('')
       return
     }
-    setSelectionBounds(logicalBounds(selectedElement, canvas))
+    const bounds = logicalBounds(selectedElement, canvas)
+    setSelectionBounds(bounds)
+    setAnchorVisual(anchorVisualFor(selectedElement, canvas, bounds))
     setBlockReason(editBlockReason(selectedElement, canvas))
   }, [canvas, selectedElement])
 
@@ -277,6 +371,7 @@ export function UnityCanvasEditor({
     element: HTMLElement,
     kind: CanvasInteraction['kind'],
     handle?: ResizeHandle,
+    anchorHandle?: AnchorHandle,
   ) => {
     if (!canvas || interactionDisabled || event.button !== 0) return
     const reason = editBlockReason(element, canvas)
@@ -287,30 +382,47 @@ export function UnityCanvasEditor({
 
     const canvasRect = canvas.getBoundingClientRect()
     const bounds = logicalBounds(element, canvas)
+    const parent = element.parentElement?.closest<HTMLElement>(nodeSelector) ?? null
+    const startLayout = readUnityAnchorLayout(element)
+    if (!parent || !startLayout) {
+      onMessage('父级预览尺寸不可用，无法开始布局操作。')
+      return
+    }
     const guideValues = collectGuideValues(element, canvas)
+    const trackedAttributes = ['data-pos', 'data-size', 'data-anchors', 'data-anchor-min', 'data-anchor-max', 'data-pivot']
     interactionRef.current = {
       kind,
       pointerId: event.pointerId,
       element,
       handle,
+      anchorHandle,
       startClient: [event.clientX, event.clientY],
       scale: [
         canvasRect.width > 0 ? canvasRect.width / canvas.clientWidth : 1,
         canvasRect.height > 0 ? canvasRect.height / canvas.clientHeight : 1,
       ],
       startBounds: bounds,
-      startPosition: parseVector(element.dataset.pos, 3, [0, 0, 0]),
-      startSize: parseVector(element.dataset.size, 2, [bounds.width, bounds.height]),
-      pivot: parseVector(element.dataset.pivot, 2, [0.5, 0.5]),
-      beforePosition: element.getAttribute('data-pos'),
-      beforeSize: element.getAttribute('data-size'),
+      parentBounds: logicalBounds(parent, canvas),
+      startLayout,
+      startPosition: [...startLayout.position],
+      startSize: [...startLayout.size],
+      pivot: [...startLayout.pivot],
+      beforeAttributes: Object.fromEntries(
+        trackedAttributes.map((attribute) => [attribute, element.getAttribute(attribute)]),
+      ),
       xGuides: guideValues.x,
       yGuides: guideValues.y,
     }
     pointerRef.current = { clientX: event.clientX, clientY: event.clientY, altKey: event.altKey }
     setGuides([])
     document.body.classList.add('is-uirect-dragging')
-    onMessage(kind === 'move' ? '拖动节点；按住 Alt 可临时关闭吸附。' : '调整节点尺寸；按住 Alt 可临时关闭吸附。')
+    const messages: Record<CanvasInteraction['kind'], string> = {
+      move: '拖动节点；按住 Alt 可临时关闭吸附。',
+      resize: '调整节点尺寸；按住 Alt 可临时关闭吸附。',
+      anchor: '拖动锚点；将吸附到 0、0.5、1，按住 Alt 可临时关闭吸附。',
+      pivot: '拖动轴心；当前矩形会保持不变。',
+    }
+    onMessage(messages[kind])
     event.preventDefault()
     event.stopPropagation()
   }, [canvas, interactionDisabled, onMessage])
@@ -324,6 +436,60 @@ export function UnityCanvasEditor({
     const nextGuides: CanvasGuide[] = []
     const thresholdX = 6 / interaction.scale[0]
     const thresholdY = 6 / interaction.scale[1]
+
+    if (interaction.kind === 'anchor' || interaction.kind === 'pivot') {
+      const canvasRect = canvas.getBoundingClientRect()
+      const pointerX = (snapshot.clientX - canvasRect.left) / interaction.scale[0]
+      const pointerY = (snapshot.clientY - canvasRect.top) / interaction.scale[1]
+      let nextLayout: UnityAnchorLayout
+
+      if (interaction.kind === 'anchor') {
+        const anchors: UnityAnchors = [...interaction.startLayout.anchors]
+        const normalizedX = snapAnchorValue(
+          (pointerX - interaction.parentBounds.left) / interaction.parentBounds.width,
+          interaction.parentBounds.width,
+          interaction.scale[0],
+          snapshot.altKey,
+        )
+        const normalizedY = snapAnchorValue(
+          1 - (pointerY - interaction.parentBounds.top) / interaction.parentBounds.height,
+          interaction.parentBounds.height,
+          interaction.scale[1],
+          snapshot.altKey,
+        )
+
+        if (interaction.anchorHandle === 'point') {
+          anchors[0] = normalizedX
+          anchors[1] = normalizedY
+          anchors[2] = normalizedX
+          anchors[3] = normalizedY
+        } else if (interaction.anchorHandle === 'min') {
+          anchors[0] = Math.min(normalizedX, anchors[2])
+          anchors[1] = Math.min(normalizedY, anchors[3])
+        } else {
+          anchors[2] = Math.max(normalizedX, anchors[0])
+          anchors[3] = Math.max(normalizedY, anchors[1])
+        }
+        nextLayout = preserveRectWithAnchors(interaction.startLayout, anchors)
+      } else {
+        const pivot: UnityPoint = [
+          clamp01((pointerX - interaction.startBounds.left) / Math.max(interaction.startBounds.width, 0.0001)),
+          clamp01(1 - (pointerY - interaction.startBounds.top) / Math.max(interaction.startBounds.height, 0.0001)),
+        ]
+        nextLayout = preserveRectWithAnchors(
+          interaction.startLayout,
+          interaction.startLayout.anchors,
+          pivot,
+        )
+      }
+
+      onPreviewChanges(interaction.element, changesForLayout(interaction, nextLayout))
+      const bounds = logicalBounds(interaction.element, canvas)
+      setSelectionBounds(bounds)
+      setAnchorVisual(anchorVisualFor(interaction.element, canvas, bounds))
+      setGuides([])
+      return
+    }
 
     if (!snapshot.altKey) {
       if (interaction.kind === 'move') {
@@ -381,7 +547,7 @@ export function UnityCanvasEditor({
       ]
       changes = [{
         attribute: 'data-pos',
-        before: interaction.beforePosition,
+        before: interaction.beforeAttributes['data-pos'] ?? null,
         after: formatVector(position),
       }]
     } else {
@@ -389,12 +555,12 @@ export function UnityCanvasEditor({
       changes = [
         {
           attribute: 'data-pos',
-          before: interaction.beforePosition,
+          before: interaction.beforeAttributes['data-pos'] ?? null,
           after: formatVector(result.position),
         },
         {
           attribute: 'data-size',
-          before: interaction.beforeSize,
+          before: interaction.beforeAttributes['data-size'] ?? null,
           after: formatVector(result.size),
         },
       ]
@@ -402,7 +568,9 @@ export function UnityCanvasEditor({
 
     onPreviewChanges(interaction.element, changes)
     setGuides(nextGuides)
-    setSelectionBounds(logicalBounds(interaction.element, canvas))
+    const bounds = logicalBounds(interaction.element, canvas)
+    setSelectionBounds(bounds)
+    setAnchorVisual(anchorVisualFor(interaction.element, canvas, bounds))
   }, [canvas, onPreviewChanges])
 
   useEffect(() => {
@@ -430,18 +598,11 @@ export function UnityCanvasEditor({
       }
       applyPointerSnapshot({ clientX: event.clientX, clientY: event.clientY, altKey: event.altKey })
 
-      const changes: CanvasAttributeChange[] = [{
-        attribute: 'data-pos',
-        before: interaction.beforePosition,
-        after: interaction.element.getAttribute('data-pos'),
-      }]
-      if (interaction.kind === 'resize') {
-        changes.push({
-          attribute: 'data-size',
-          before: interaction.beforeSize,
-          after: interaction.element.getAttribute('data-size'),
-        })
-      }
+      const changes: CanvasAttributeChange[] = interactionAttributes(interaction.kind).map((attribute) => ({
+        attribute,
+        before: interaction.beforeAttributes[attribute] ?? null,
+        after: interaction.element.getAttribute(attribute),
+      }))
       onCommitChanges(interaction.element, changes)
       interactionRef.current = null
       pointerRef.current = null
@@ -457,12 +618,14 @@ export function UnityCanvasEditor({
         window.cancelAnimationFrame(animationFrameRef.current)
         animationFrameRef.current = null
       }
-      onPreviewChanges(interaction.element, [
-        { attribute: 'data-pos', before: interaction.beforePosition, after: interaction.beforePosition },
-        ...(interaction.kind === 'resize'
-          ? [{ attribute: 'data-size', before: interaction.beforeSize, after: interaction.beforeSize }]
-          : []),
-      ])
+      onPreviewChanges(
+        interaction.element,
+        interactionAttributes(interaction.kind).map((attribute) => ({
+          attribute,
+          before: interaction.element.getAttribute(attribute),
+          after: interaction.beforeAttributes[attribute] ?? null,
+        })),
+      )
       interactionRef.current = null
       pointerRef.current = null
       setGuides([])
@@ -553,7 +716,9 @@ export function UnityCanvasEditor({
       }
       onPreviewChanges(selectedElement, [change])
       onCommitChanges(selectedElement, [change])
-      setSelectionBounds(logicalBounds(selectedElement, canvas))
+      const bounds = logicalBounds(selectedElement, canvas)
+      setSelectionBounds(bounds)
+      setAnchorVisual(anchorVisualFor(selectedElement, canvas, bounds))
       event.preventDefault()
     }
 
@@ -564,7 +729,7 @@ export function UnityCanvasEditor({
   if (!canvas) return null
 
   return createPortal(
-    <div className="unity-canvas-overlay" aria-hidden="true">
+    <div className="unity-canvas-overlay">
       {guides.map((guide, index) => (
         <span
           className={`unity-canvas-guide is-${guide.axis}`}
@@ -619,6 +784,60 @@ export function UnityCanvasEditor({
             />
           ))}
         </div>
+      )}
+      {selectionBounds && anchorVisual && selectedElement && editMode && !blockReason && (
+        <>
+          <span
+            className="unity-canvas-anchor-range"
+            style={{
+              left: anchorVisual.range.left,
+              top: anchorVisual.range.top,
+              width: anchorVisual.range.width,
+              height: anchorVisual.range.height,
+            }}
+          />
+          <button
+            className={'unity-canvas-anchor-handle ' + (anchorVisual.pointAnchored ? 'is-point' : 'is-min')}
+            type="button"
+            aria-label={anchorVisual.pointAnchored ? '拖动点锚点' : '拖动 Anchor Min'}
+            style={{ left: anchorVisual.min[0], top: anchorVisual.min[1] }}
+            onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+              beginInteraction(
+                event.nativeEvent,
+                selectedElement,
+                'anchor',
+                undefined,
+                anchorVisual.pointAnchored ? 'point' : 'min',
+              )
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+          />
+          {!anchorVisual.pointAnchored && (
+            <button
+              className="unity-canvas-anchor-handle is-max"
+              type="button"
+              aria-label="拖动 Anchor Max"
+              style={{ left: anchorVisual.max[0], top: anchorVisual.max[1] }}
+              onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+                beginInteraction(event.nativeEvent, selectedElement, 'anchor', undefined, 'max')
+                event.preventDefault()
+                event.stopPropagation()
+              }}
+            />
+          )}
+          <button
+            className="unity-canvas-pivot-handle"
+            type="button"
+            aria-label="拖动 Pivot"
+            style={{ left: anchorVisual.pivot[0], top: anchorVisual.pivot[1] }}
+            onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+              beginInteraction(event.nativeEvent, selectedElement, 'pivot')
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+          />
+        </>
       )}
     </div>,
     canvas,

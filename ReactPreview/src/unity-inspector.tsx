@@ -10,6 +10,7 @@ import {
   type CanvasAttributeChange,
   type CanvasAttributeValue,
 } from './unity-canvas-editor'
+import { AnchorLayoutEditor } from './unity-anchor-editor'
 
 type Vector = number[]
 type AttributeValue = CanvasAttributeValue
@@ -77,10 +78,6 @@ const booleanOptions = [
 ]
 
 const layoutFields: EditorFieldDefinition[] = [
-  { attribute: 'data-pos', label: '位置', placeholder: '(0, 0, 0)' },
-  { attribute: 'data-size', label: '尺寸', placeholder: '(100, 100)' },
-  { attribute: 'data-anchors', label: '锚点', placeholder: '(0.5, 0.5, 0.5, 0.5)' },
-  { attribute: 'data-pivot', label: '轴心', placeholder: '(0.5, 0.5)' },
   { attribute: 'data-rot', label: '旋转', placeholder: '(0, 0, 0)' },
   { attribute: 'data-scale', label: '缩放', placeholder: '(1, 1, 1)' },
 ]
@@ -544,11 +541,15 @@ function InspectorDetail({
   editMode,
   onPreview,
   onCommit,
+  onPreviewChanges,
+  onCommitChanges,
 }: {
   node: UnityNodeInfo | undefined
   editMode: boolean
   onPreview: (node: UnityNodeInfo, attribute: string, value: AttributeValue) => void
   onCommit: (node: UnityNodeInfo, attribute: string, before: AttributeValue, after: AttributeValue) => void
+  onPreviewChanges: (element: HTMLElement, changes: CanvasAttributeChange[]) => void
+  onCommitChanges: (element: HTMLElement, changes: CanvasAttributeChange[]) => void
 }): ReactNode {
   if (!node) {
     return (
@@ -585,7 +586,15 @@ function InspectorDetail({
       {editMode ? (
         node.editable ? (
           <>
-            <InspectorSection title="精确布局">
+            <InspectorSection title="锚点与精确布局">
+              <AnchorLayoutEditor
+                nodeKey={node.key}
+                element={node.element}
+                onPreviewChanges={(changes) => onPreviewChanges(node.element, changes)}
+                onCommitChanges={(changes) => onCommitChanges(node.element, changes)}
+              />
+            </InspectorSection>
+            <InspectorSection title="旋转与缩放">
               <EditorFields node={node} definitions={layoutFields} onPreview={onPreview} onCommit={onCommit} />
             </InspectorSection>
             <InspectorSection title="视觉与状态">
@@ -938,7 +947,7 @@ export function UnityInspectorPanel({
         </div>
         {editMode && (
           <div className="unity-canvas-help">
-            拖动节点或尺寸手柄 · 方向键微调 · Shift ×10 · Alt 暂停吸附 · Ctrl+S 保存
+            拖动节点、尺寸、黄色锚点或粉色 Pivot · 方向键微调 · Shift ×10 · Alt 暂停吸附 · Ctrl+S 保存
           </div>
         )}
         <div className={'unity-editor-status ' + (dirty ? 'is-dirty' : '')}>{message}</div>
@@ -971,6 +980,8 @@ export function UnityInspectorPanel({
                 editMode={editMode}
                 onPreview={previewAttribute}
                 onCommit={commitAttribute}
+                onPreviewChanges={previewCanvasChanges}
+                onCommitChanges={commitCanvasChanges}
               />
             </section>
           </div>

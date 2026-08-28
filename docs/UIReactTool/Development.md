@@ -63,7 +63,7 @@
 
 预览工程使用 React、TypeScript 和 Vite。入口通过 `import.meta.glob` 自动发现 `Generated` 下的界面。Vite 只从 `UNITY_PROJECT_PATH` 环境变量或目标工程 `.env.local` 读取 Unity 项目根目录，不再设置仓库 `Tools/` 默认值；目录缺失或不含 `Assets` 时在启动阶段报错。布局运行时读取与 Unity 相同的锚点、轴心、位置和尺寸属性，并将 Unity 的底部原点坐标转换为浏览器顶部原点坐标。Stretch 锚点使用轴心在锚点区间内插值得到参考点，与 RectTransform 一致。
 
-预览工具提供 750×1680、720×1600、828×1792 和 390×844 四个竖屏设备尺寸。画布按 UIManager 主画布的高度匹配方式保持 1680 逻辑高度，并根据设备宽高比调整逻辑宽度；目标 CanvasScaler 使用 `MatchWidthOrHeight=1`。响应式 Prefab 根节点填充 UIManager 层级，Unity 运行时整体缩放由目标项目的 UIManager CanvasScaler 负责，工具不在 Prefab 内重复添加 Canvas 或手动缩放。
+预览工具提供设计基准、窄屏和大屏手机、手机逻辑像素、平板横竖屏、16:9、16:10 与 21:9 桌面尺寸。画布按 UIManager 主画布的高度匹配方式保持 1680 逻辑高度，并根据设备宽高比调整逻辑宽度；目标 CanvasScaler 使用 `MatchWidthOrHeight=1`。响应式 Prefab 根节点填充 UIManager 层级，Unity 运行时整体缩放由目标项目的 UIManager CanvasScaler 负责，工具不在 Prefab 内重复添加 Canvas 或手动缩放。
 
 若界面选择固定参考布局，应在根标签声明 `data-layout-mode="FixedReference"`，使 Unity 生成和 React 预览同时保持固定参考尺寸；未声明时由工具配置决定 Unity 生成模式，React 预览按响应式模式处理。
 
@@ -75,7 +75,11 @@
 
 画布编辑器直接更新预览 DOM，让布局转换立即重算。拖动过程由 `requestAnimationFrame` 合并预览更新，松开后把全部位置和尺寸变化提交为一条会话内撤销命令。移动和尺寸边缘可吸附到 5 像素网格、画布、父级及同级节点的边缘或中心；按住 Alt 临时跳过吸附。方向键每次移动 1 个逻辑像素，Shift 配合方向键移动 10 个逻辑像素。
 
-当前自由操作只开放给具有唯一静态 `data-name` 的点锚定普通节点。根节点由画布和根布局模式控制；拉伸锚点节点需要边距语义；布局组子节点的位置由父级控制，因此三者在画布中显示锁定原因并保留精确属性检查入口。
+锚点换算模块按父级尺寸、Anchor Min/Max、Pivot、Anchored Position 与 Size Delta 还原当前矩形。修改锚点或 Pivot 时先固定该矩形，再反算新的 Position 与 Size Delta；四位归一化精度避免超宽逻辑画布放大舍入误差。右侧面板提供 16 个常用预设、Min/Max/Pivot 自定义值和“当前边界转比例锚点”，拉伸轴把 Position/Size Delta 转换为左、右、上、下边距显示。
+
+画布以黄色控制点表示点锚点或 Anchor Min/Max，以粉色控制点表示 Pivot。锚点拖动限制在父级归一化范围内并保证 Min 不大于 Max，默认吸附到 0、0.5 和 1；按住 Alt 暂停吸附。锚点、显式拆分锚点属性、Pivot、Position 与 Size Delta 的联动变化按一次手势合并为单条撤销记录。
+
+具有唯一静态 `data-name` 且不受布局组控制的普通节点均可拖动和缩放，拉伸节点的边界变化自然反映为边距变化。根节点由画布和根布局模式控制；布局组子节点的位置由父级控制，二者继续显示锁定原因。
 
 右侧精确面板的字段变化同样更新预览 DOM，字段失焦后形成一条撤销命令。保存时，浏览器把按节点和属性合并后的修改提交给 Vite 本地接口。接口要求工程初始化标记有效、页面位于 `Generated`、`data-name` 唯一且目标属性在允许列表中，然后通过 TypeScript AST 定位静态 JSX 属性，只替换目标源码范围。`data-text` 写回时同步直接 JSX 文本，保证热更新后的浏览器显示与 Unity 输入一致。
 
@@ -87,7 +91,7 @@
 
 ## 验收边界
 
-发布目录只验证工具程序集编译、静态 TSX 解析、Prefab 生成和 React 预览构建。GameLauncher、UIManager 挂载、字体、组件 Prefab 和资源系统的运行时验收必须在目标项目中完成；目标项目应覆盖 750×1680、720×1600、828×1792 和 390×844，并检查 `GameMenu_MainPage` 的 `RectTransform.rect` 与 `Layer_50` 一致。
+发布目录只验证工具程序集编译、静态 TSX 解析、Prefab 生成和 React 预览构建。GameLauncher、UIManager 挂载、字体、组件 Prefab 和资源系统的运行时验收必须在目标项目中完成；目标项目应至少覆盖设计基准、手机窄屏、平板横屏、16:9 宽屏和 21:9 超宽屏，并检查响应式根节点与 UI 挂载层尺寸一致。
 
 ## 已知限制
 
@@ -95,5 +99,5 @@
 - 文本资源编号和字体资源编号尚未接入具体业务资源解析器；图片目前按直接项目路径加载，尚未接入资源地址或图集子 Sprite 解析。
 - 输入切换和 Prefab 加载器在缺少项目专用同名 Prefab 时只生成中性 RectTransform 容器。
 - Prefab 覆盖保存属于确定性资源生成操作，Unity 不提供对文件覆盖的完整 Undo；应使用版本控制恢复旧资源。
-- 当前手动调整不修改 `data-name`、`data-component`、界面模式或 JSX 层级，也不提供多选、批量对齐、跨父级移动、拉伸锚点边距手柄或布局组专用操纵器。
+- 当前手动调整不修改 `data-name`、`data-component`、界面模式或 JSX 层级，也不提供多选、批量对齐、跨父级移动或布局组专用操纵器。
 
